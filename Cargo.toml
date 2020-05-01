@@ -1,0 +1,19 @@
+[package]
+name = "oxilangtag"
+version = "0.1.0"
+authors = ["Tpt <thomas@pellissier-tanon.fr>"]
+license = "MIT/Apache-2.0"
+readme = "README.md"
+keywords = ["language-tag", "BCP47"]
+repository = "https://github.com/oxigraph/oxilangtag"
+description = """
+Simple and fast implementation of language tag normalization and validation
+"""
+edition = "2018"
+
+[dev-dependencies]
+criterion = "0.3"
+
+[[bench]]
+name = "lib"
+harness = false
