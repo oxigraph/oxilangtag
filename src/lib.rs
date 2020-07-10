@@ -1,7 +1,6 @@
 //! Utilities to validate language tags following [RFC 5646](https://tools.ietf.org/html/rfc5646)
 //! ([BCP 47](https://tools.ietf.org/html/bcp47)).
 //!
-//! Example:
 //! ```
 //! use oxilangtag::LanguageTag;
 //!
@@ -30,7 +29,6 @@ use std::str::{FromStr, Split};
 
 /// A [RFC 5646](https://tools.ietf.org/html/rfc5646) language tag.
 ///
-/// Example:
 /// ```
 /// use oxilangtag::LanguageTag;
 ///
@@ -49,7 +47,6 @@ impl<T: Deref<Target = str>> LanguageTag<T> {
     ///
     /// This operation keeps internally the `tag` parameter and does not allocate on the heap.
     ///
-    /// Example:
     /// ```
     /// use oxilangtag::LanguageTag;
     ///
@@ -192,7 +189,6 @@ impl LanguageTag<String> {
     ///
     /// This operation does heap allocation.
     ///
-    /// Example:
     /// ```
     /// use oxilangtag::LanguageTag;
     ///
