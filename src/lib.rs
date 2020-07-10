@@ -19,8 +19,11 @@
     unused_qualifications
 )]
 
+use std::borrow::{Borrow, Cow};
+use std::cmp::Ordering;
 use std::error::Error;
 use std::fmt;
+use std::hash::{Hash, Hasher};
 use std::iter::once;
 use std::ops::Deref;
 use std::str::{FromStr, Split};
@@ -34,8 +37,8 @@ use std::str::{FromStr, Split};
 /// let language_tag = LanguageTag::parse("en-us").unwrap();
 /// assert_eq!("en-us", language_tag.into_inner())
 /// ```
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub struct LanguageTag<T: Deref<Target = str>> {
+#[derive(Clone, Copy)]
+pub struct LanguageTag<T> {
     tag: T,
     positions: TagElementsPositions,
 }
@@ -206,14 +209,123 @@ impl LanguageTag<String> {
     }
 }
 
-impl<T: Deref<Target = str>> AsRef<T> for LanguageTag<T> {
+impl<Lft: PartialEq<Rhs>, Rhs> PartialEq<LanguageTag<Rhs>> for LanguageTag<Lft> {
     #[inline]
-    fn as_ref(&self) -> &T {
-        &self.tag
+    fn eq(&self, other: &LanguageTag<Rhs>) -> bool {
+        self.tag.eq(&other.tag)
     }
 }
 
-impl<T: Deref<Target = str> + fmt::Display> fmt::Display for LanguageTag<T> {
+impl<T: PartialEq<str>> PartialEq<str> for LanguageTag<T> {
+    #[inline]
+    fn eq(&self, other: &str) -> bool {
+        self.tag.eq(other)
+    }
+}
+
+impl<'a, T: PartialEq<&'a str>> PartialEq<&'a str> for LanguageTag<T> {
+    #[inline]
+    fn eq(&self, other: &&'a str) -> bool {
+        self.tag.eq(other)
+    }
+}
+
+impl<T: PartialEq<String>> PartialEq<String> for LanguageTag<T> {
+    #[inline]
+    fn eq(&self, other: &String) -> bool {
+        self.tag.eq(other)
+    }
+}
+
+impl<'a, T: PartialEq<Cow<'a, str>>> PartialEq<Cow<'a, str>> for LanguageTag<T> {
+    #[inline]
+    fn eq(&self, other: &Cow<'a, str>) -> bool {
+        self.tag.eq(other)
+    }
+}
+
+impl<T: PartialEq<str>> PartialEq<LanguageTag<T>> for str {
+    #[inline]
+    fn eq(&self, other: &LanguageTag<T>) -> bool {
+        other.tag.eq(self)
+    }
+}
+
+impl<'a, T: PartialEq<&'a str>> PartialEq<LanguageTag<T>> for &'a str {
+    #[inline]
+    fn eq(&self, other: &LanguageTag<T>) -> bool {
+        other.tag.eq(self)
+    }
+}
+
+impl<T: PartialEq<String>> PartialEq<LanguageTag<T>> for String {
+    #[inline]
+    fn eq(&self, other: &LanguageTag<T>) -> bool {
+        other.tag.eq(self)
+    }
+}
+
+impl<'a, T: PartialEq<Cow<'a, str>>> PartialEq<LanguageTag<T>> for Cow<'a, str> {
+    #[inline]
+    fn eq(&self, other: &LanguageTag<T>) -> bool {
+        other.tag.eq(self)
+    }
+}
+
+impl<T: Eq> Eq for LanguageTag<T> {}
+
+impl<T: Hash> Hash for LanguageTag<T> {
+    #[inline]
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.tag.hash(state)
+    }
+}
+
+impl<T: PartialOrd> PartialOrd for LanguageTag<T> {
+    #[inline]
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        self.tag.partial_cmp(&other.tag)
+    }
+}
+
+impl<T: Ord> Ord for LanguageTag<T> {
+    #[inline]
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.tag.cmp(&other.tag)
+    }
+}
+
+impl<T: Deref<Target = str>> Deref for LanguageTag<T> {
+    type Target = str;
+
+    #[inline]
+    fn deref(&self) -> &str {
+        self.tag.deref()
+    }
+}
+
+impl<T: AsRef<str>> AsRef<str> for LanguageTag<T> {
+    #[inline]
+    fn as_ref(&self) -> &str {
+        self.tag.as_ref()
+    }
+}
+
+impl<T: Borrow<str>> Borrow<str> for LanguageTag<T> {
+    #[inline]
+    fn borrow(&self) -> &str {
+        self.tag.borrow()
+    }
+}
+
+impl<T: fmt::Debug> fmt::Debug for LanguageTag<T> {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.tag.fmt(f)
+    }
+}
+
+impl<T: fmt::Display> fmt::Display for LanguageTag<T> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.tag.fmt(f)
@@ -226,6 +338,56 @@ impl FromStr for LanguageTag<String> {
     #[inline]
     fn from_str(tag: &str) -> Result<Self, LanguageTagParseError> {
         Self::parse_and_normalize(tag)
+    }
+}
+
+impl<'a> From<LanguageTag<&'a str>> for LanguageTag<String> {
+    #[inline]
+    fn from(tag: LanguageTag<&'a str>) -> Self {
+        Self {
+            tag: tag.tag.into(),
+            positions: tag.positions,
+        }
+    }
+}
+
+impl<'a> From<LanguageTag<Cow<'a, str>>> for LanguageTag<String> {
+    #[inline]
+    fn from(tag: LanguageTag<Cow<'a, str>>) -> Self {
+        Self {
+            tag: tag.tag.into(),
+            positions: tag.positions,
+        }
+    }
+}
+
+impl From<LanguageTag<Box<str>>> for LanguageTag<String> {
+    #[inline]
+    fn from(tag: LanguageTag<Box<str>>) -> Self {
+        Self {
+            tag: tag.tag.into(),
+            positions: tag.positions,
+        }
+    }
+}
+
+impl<'a> From<LanguageTag<&'a str>> for LanguageTag<Cow<'a, str>> {
+    #[inline]
+    fn from(tag: LanguageTag<&'a str>) -> Self {
+        Self {
+            tag: tag.tag.into(),
+            positions: tag.positions,
+        }
+    }
+}
+
+impl<'a> From<LanguageTag<String>> for LanguageTag<Cow<'a, str>> {
+    #[inline]
+    fn from(tag: LanguageTag<String>) -> Self {
+        Self {
+            tag: tag.tag.into(),
+            positions: tag.positions,
+        }
     }
 }
 
@@ -285,7 +447,7 @@ enum TagParseErrorKind {
     TooManyExtlangs,
 }
 
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
+#[derive(Debug, Clone, Copy)]
 struct TagElementsPositions {
     language_end: usize,
     extlang_end: usize,

@@ -1,4 +1,6 @@
 use oxilangtag::LanguageTag;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 
 // Tests from RFC 5646 2.1.1
 #[test]
@@ -671,4 +673,27 @@ fn test_random_bad_tags() {
             result.ok().unwrap()
         );
     }
+}
+
+#[test]
+fn test_eq() {
+    let tag = LanguageTag::parse("en-fr").unwrap();
+    assert_eq!(tag, tag);
+    assert_eq!(tag, "en-fr");
+    assert_ne!(tag, "en-FR");
+    assert_eq!("en-fr", tag);
+    assert_eq!(hash(&tag), hash("en-fr"));
+    assert_ne!(hash(&tag), hash("en-FR"));
+}
+
+fn hash(value: impl Hash) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    value.hash(&mut hasher);
+    hasher.finish()
+}
+
+#[test]
+fn test_str() {
+    let tag = LanguageTag::parse("en-fr").unwrap();
+    assert!(tag.starts_with("en-"));
 }
