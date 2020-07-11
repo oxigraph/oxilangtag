@@ -4,8 +4,18 @@
 //! ```
 //! use oxilangtag::LanguageTag;
 //!
-//! let language_tag = LanguageTag::parse("en-US").unwrap();
-//! assert_eq!("en-US", language_tag.into_inner())
+//! // Parsing and validation
+//! let language_tag = LanguageTag::parse("zh-cmn-Hans-CN-x-test").unwrap();
+//! assert_eq!(language_tag.as_str(), "zh-cmn-Hans-CN-x-test");
+//!
+//! // Language tag components
+//! assert_eq!(language_tag.primary_language(), "zh");
+//! assert_eq!(language_tag.extended_language(), Some("cmn"));
+//! assert_eq!(language_tag.full_language(), "zh-cmn");
+//! assert_eq!(language_tag.script(), Some("Hans"));
+//! assert_eq!(language_tag.region(), Some("CN"));
+//! assert_eq!(language_tag.extension(), None);
+//! assert_eq!(language_tag.private_use_subtags().collect::<Vec<_>>(), vec!["test"]);
 //! ```
 #![deny(
     future_incompatible,
@@ -33,7 +43,7 @@ use std::str::{FromStr, Split};
 /// use oxilangtag::LanguageTag;
 ///
 /// let language_tag = LanguageTag::parse("en-us").unwrap();
-/// assert_eq!("en-us", language_tag.into_inner())
+/// assert_eq!(language_tag.into_inner(), "en-us")
 /// ```
 #[derive(Clone, Copy)]
 pub struct LanguageTag<T> {
@@ -51,7 +61,7 @@ impl<T: Deref<Target = str>> LanguageTag<T> {
     /// use oxilangtag::LanguageTag;
     ///
     /// let language_tag = LanguageTag::parse("en-us").unwrap();
-    /// assert_eq!("en-us", language_tag.into_inner())
+    /// assert_eq!(language_tag.into_inner(), "en-us")
     /// ```
     pub fn parse(tag: T) -> Result<Self, LanguageTagParseError> {
         let positions = parse_language_tag(&tag, &mut VoidOutputBuffer::default())?;
@@ -71,6 +81,13 @@ impl<T: Deref<Target = str>> LanguageTag<T> {
     }
 
     /// Returns the [primary language subtag](https://tools.ietf.org/html/rfc5646#section-2.2.1).
+    ///
+    /// ```
+    /// use oxilangtag::LanguageTag;
+    ///
+    /// let language_tag = LanguageTag::parse("zh-cmn-Hans-CN").unwrap();
+    /// assert_eq!(language_tag.primary_language(), "zh");
+    /// ```
     #[inline]
     pub fn primary_language(&self) -> &str {
         &self.tag[..self.positions.language_end]
@@ -79,6 +96,13 @@ impl<T: Deref<Target = str>> LanguageTag<T> {
     /// Returns the [extended language subtags](https://tools.ietf.org/html/rfc5646#section-2.2.2).
     ///
     /// Valid language tags have at most one extended language.
+    ///
+    /// ```
+    /// use oxilangtag::LanguageTag;
+    ///
+    /// let language_tag = LanguageTag::parse("zh-cmn-Hans-CN").unwrap();
+    /// assert_eq!(language_tag.extended_language(), Some("cmn"));
+    /// ```
     #[inline]
     pub fn extended_language(&self) -> Option<&str> {
         if self.positions.language_end == self.positions.extlang_end {
@@ -91,6 +115,13 @@ impl<T: Deref<Target = str>> LanguageTag<T> {
     /// Iterates on the [extended language subtags](https://tools.ietf.org/html/rfc5646#section-2.2.2).
     ///
     /// Valid language tags have at most one extended language.
+    ///
+    /// ```
+    /// use oxilangtag::LanguageTag;
+    ///
+    /// let language_tag = LanguageTag::parse("zh-cmn-Hans-CN").unwrap();
+    /// assert_eq!(language_tag.extended_language_subtags().collect::<Vec<_>>(), vec!["cmn"]);
+    /// ```
     #[inline]
     pub fn extended_language_subtags(&self) -> impl Iterator<Item = &str> {
         self.extended_language().unwrap_or("").split_terminator('-')
@@ -98,12 +129,26 @@ impl<T: Deref<Target = str>> LanguageTag<T> {
 
     /// Returns the [primary language subtag](https://tools.ietf.org/html/rfc5646#section-2.2.1)
     /// and its [extended language subtags](https://tools.ietf.org/html/rfc5646#section-2.2.2).
+    ///
+    /// ```
+    /// use oxilangtag::LanguageTag;
+    ///
+    /// let language_tag = LanguageTag::parse("zh-cmn-Hans-CN").unwrap();
+    /// assert_eq!(language_tag.full_language(), "zh-cmn");
+    /// ```
     #[inline]
     pub fn full_language(&self) -> &str {
         &self.tag[..self.positions.extlang_end]
     }
 
     /// Returns the [script subtag](https://tools.ietf.org/html/rfc5646#section-2.2.3).
+    ///
+    /// ```
+    /// use oxilangtag::LanguageTag;
+    ///
+    /// let language_tag = LanguageTag::parse("zh-cmn-Hans-CN").unwrap();
+    /// assert_eq!(language_tag.script(), Some("Hans"));
+    /// ```
     #[inline]
     pub fn script(&self) -> Option<&str> {
         if self.positions.extlang_end == self.positions.script_end {
@@ -114,6 +159,13 @@ impl<T: Deref<Target = str>> LanguageTag<T> {
     }
 
     /// Returns the [region subtag](https://tools.ietf.org/html/rfc5646#section-2.2.4).
+    ///
+    /// ```
+    /// use oxilangtag::LanguageTag;
+    ///
+    /// let language_tag = LanguageTag::parse("zh-cmn-Hans-CN").unwrap();
+    /// assert_eq!(language_tag.region(), Some("CN"));
+    /// ```
     #[inline]
     pub fn region(&self) -> Option<&str> {
         if self.positions.script_end == self.positions.region_end {
@@ -124,6 +176,13 @@ impl<T: Deref<Target = str>> LanguageTag<T> {
     }
 
     /// Returns the [variant subtags](https://tools.ietf.org/html/rfc5646#section-2.2.5).
+    ///
+    /// ```
+    /// use oxilangtag::LanguageTag;
+    ///
+    /// let language_tag = LanguageTag::parse("zh-Latn-TW-pinyin").unwrap();
+    /// assert_eq!(language_tag.variant(), Some("pinyin"));
+    /// ```
     #[inline]
     pub fn variant(&self) -> Option<&str> {
         if self.positions.region_end == self.positions.variant_end {
@@ -134,12 +193,26 @@ impl<T: Deref<Target = str>> LanguageTag<T> {
     }
 
     /// Iterates on the [variant subtags](https://tools.ietf.org/html/rfc5646#section-2.2.5).
+    ///
+    /// ```
+    /// use oxilangtag::LanguageTag;
+    ///
+    /// let language_tag = LanguageTag::parse("zh-Latn-TW-pinyin").unwrap();
+    /// assert_eq!(language_tag.variant_subtags().collect::<Vec<_>>(), vec!["pinyin"]);
+    /// ```
     #[inline]
     pub fn variant_subtags(&self) -> impl Iterator<Item = &str> {
         self.variant().unwrap_or("").split_terminator('-')
     }
 
     /// Returns the [extension subtags](https://tools.ietf.org/html/rfc5646#section-2.2.6).
+    ///
+    /// ```
+    /// use oxilangtag::LanguageTag;
+    ///
+    /// let language_tag = LanguageTag::parse("de-DE-u-co-phonebk").unwrap();
+    /// assert_eq!(language_tag.extension(), Some("u-co-phonebk"));
+    /// ```
     #[inline]
     pub fn extension(&self) -> Option<&str> {
         if self.positions.variant_end == self.positions.extension_end {
@@ -150,6 +223,13 @@ impl<T: Deref<Target = str>> LanguageTag<T> {
     }
 
     /// Iterates on the [extension subtags](https://tools.ietf.org/html/rfc5646#section-2.2.6).
+    ///
+    /// ```
+    /// use oxilangtag::LanguageTag;
+    ///
+    /// let language_tag = LanguageTag::parse("de-DE-u-co-phonebk").unwrap();
+    /// assert_eq!(language_tag.extension_subtags().collect::<Vec<_>>(), vec![('u', "co-phonebk")]);
+    /// ```
     #[inline]
     pub fn extension_subtags(&self) -> impl Iterator<Item = (char, &str)> {
         match self.extension() {
@@ -159,6 +239,13 @@ impl<T: Deref<Target = str>> LanguageTag<T> {
     }
 
     /// Returns the [private use subtags](https://tools.ietf.org/html/rfc5646#section-2.2.7).
+    ///
+    /// ```
+    /// use oxilangtag::LanguageTag;
+    ///
+    /// let language_tag = LanguageTag::parse("de-x-foo-bar").unwrap();
+    /// assert_eq!(language_tag.private_use(), Some("x-foo-bar"));
+    /// ```
     #[inline]
     pub fn private_use(&self) -> Option<&str> {
         if self.tag.starts_with("x-") {
@@ -171,6 +258,13 @@ impl<T: Deref<Target = str>> LanguageTag<T> {
     }
 
     /// Iterates on the [private use subtags](https://tools.ietf.org/html/rfc5646#section-2.2.7).
+    ///
+    /// ```
+    /// use oxilangtag::LanguageTag;
+    ///
+    /// let language_tag = LanguageTag::parse("de-x-foo-bar").unwrap();
+    /// assert_eq!(language_tag.private_use_subtags().collect::<Vec<_>>(), vec!["foo", "bar"]);
+    /// ```
     #[inline]
     pub fn private_use_subtags(&self) -> impl Iterator<Item = &str> {
         self.private_use()
@@ -193,7 +287,7 @@ impl LanguageTag<String> {
     /// use oxilangtag::LanguageTag;
     ///
     /// let language_tag = LanguageTag::parse_and_normalize("en-us").unwrap();
-    /// assert_eq!("en-US", language_tag.into_inner())
+    /// assert_eq!(language_tag.into_inner(), "en-US")
     /// ```
     pub fn parse_and_normalize(tag: &str) -> Result<Self, LanguageTagParseError> {
         let mut output_buffer = String::with_capacity(tag.len());
@@ -558,13 +652,11 @@ fn parse_langtag(
     let mut extlangs_count = 0;
     for (subtag, end) in SubTagIterator::new(input) {
         if subtag.is_empty() {
-            // All subtags have a maximum length of eight characters.
             return Err(LanguageTagParseError {
                 kind: TagParseErrorKind::EmptySubtag,
             });
         }
         if subtag.len() > 8 {
-            // All subtags have a maximum length of eight characters.
             return Err(LanguageTagParseError {
                 kind: TagParseErrorKind::SubtagTooLong,
             });
