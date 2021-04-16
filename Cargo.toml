@@ -1,24 +1,21 @@
 [package]
-name = "language-tags"
-version = "0.3.0"
+name = "oxilangtag"
+version = "0.1.2"
 authors = [
-    "Pyfisch <pyfisch@gmail.com>",
     "Tpt <thomas@pellissier-tanon.fr>"
 ]
+license = "MIT"
+readme = "README.md"
+keywords = ["language-tag", "BCP47"]
+repository = "https://github.com/oxigraph/oxilangtag"
+description = """
+Simple and fast implementation of language tag normalization and validation
+"""
 edition = "2018"
 
-description = "Language tags for Rust"
-license = "MIT/Apache-2.0"
-repository = "https://github.com/pyfisch/rust-language-tags"
-keywords = ["language", "i18n", "internationalization", "translation", "http", "html"]
-categories = ["parser-implementations"]
-
-[badges]
-travis-ci = { repository = "pyfisch/rust-language-tags" }
-
 [dev-dependencies]
-bencher = "0.1"
+criterion = "0.3"
 
 [[bench]]
-name = "language_tag"
+name = "lib"
 harness = false

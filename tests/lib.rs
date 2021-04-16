@@ -1,41 +1,57 @@
-use std::str::FromStr;
-
-use language_tags::LanguageTag;
-
-// All tests here may be completly nonsensical.
+use oxilangtag::LanguageTag;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 
 // Tests from RFC 5646 2.1.1
 #[test]
 fn test_formatting() {
     assert_eq!(
         "mn-Cyrl-MN",
-        LanguageTag::parse("mn-Cyrl-MN").unwrap().as_str()
+        LanguageTag::parse_and_normalize("mn-Cyrl-MN")
+            .unwrap()
+            .as_str()
     );
     assert_eq!(
         "mn-Cyrl-MN",
-        LanguageTag::parse("MN-cYRL-mn").unwrap().as_str()
+        LanguageTag::parse_and_normalize("MN-cYRL-mn")
+            .unwrap()
+            .as_str()
     );
     assert_eq!(
         "mn-Cyrl-MN",
-        LanguageTag::parse("mN-cYrL-Mn").unwrap().as_str()
+        LanguageTag::parse_and_normalize("mN-cYrL-Mn")
+            .unwrap()
+            .as_str()
     );
     assert_eq!(
         "en-CA-x-ca",
-        LanguageTag::parse("en-CA-x-ca").unwrap().as_str()
+        LanguageTag::parse_and_normalize("en-CA-x-ca")
+            .unwrap()
+            .as_str()
     );
     assert_eq!(
         "sgn-BE-FR",
-        LanguageTag::parse("sgn-BE-FR").unwrap().as_str()
+        LanguageTag::parse_and_normalize("sgn-BE-FR")
+            .unwrap()
+            .as_str()
     );
     assert_eq!(
         "az-Latn-x-latn",
-        LanguageTag::parse("az-Latn-x-latn").unwrap().as_str()
+        LanguageTag::parse_and_normalize("az-Latn-x-latn")
+            .unwrap()
+            .as_str()
     );
-    assert_eq!("i-ami", LanguageTag::parse("i-ami").unwrap().as_str());
-    assert_eq!("i-ami", LanguageTag::parse("I-AMI").unwrap().as_str());
+    assert_eq!(
+        "i-ami",
+        LanguageTag::parse_and_normalize("i-ami").unwrap().as_str()
+    );
+    assert_eq!(
+        "i-ami",
+        LanguageTag::parse_and_normalize("I-AMI").unwrap().as_str()
+    );
     assert_eq!(
         "sl-afb-Latn-005-nedis",
-        LanguageTag::parse("SL-AFB-lATN-005-nEdis")
+        LanguageTag::parse_and_normalize("SL-AFB-lATN-005-nEdis")
             .unwrap()
             .as_str()
     )
@@ -44,30 +60,48 @@ fn test_formatting() {
 // Tests from RFC 5646 2.2.1
 #[test]
 fn test_primary_language() {
-    assert_eq!("fr", LanguageTag::parse("fr").unwrap().primary_language());
-    assert_eq!("de", LanguageTag::parse("de").unwrap().primary_language());
+    assert_eq!(
+        "fr",
+        LanguageTag::parse_and_normalize("fr")
+            .unwrap()
+            .primary_language()
+    );
+    assert_eq!(
+        "de",
+        LanguageTag::parse_and_normalize("de")
+            .unwrap()
+            .primary_language()
+    );
     assert_eq!(
         "x-fr-ch",
-        LanguageTag::parse("x-fr-CH").unwrap().primary_language()
+        LanguageTag::parse_and_normalize("x-fr-CH")
+            .unwrap()
+            .primary_language()
     );
     assert_eq!(
         "i-klingon",
-        LanguageTag::parse("i-klingon").unwrap().primary_language()
+        LanguageTag::parse_and_normalize("i-klingon")
+            .unwrap()
+            .primary_language()
     );
     assert_eq!(
         "i-bnn",
-        LanguageTag::parse("i-bnn").unwrap().primary_language()
+        LanguageTag::parse_and_normalize("i-bnn")
+            .unwrap()
+            .primary_language()
     );
     assert_eq!(
         "zh-hakka",
-        LanguageTag::parse("zh-hakka").unwrap().primary_language()
+        LanguageTag::parse_and_normalize("zh-hakka")
+            .unwrap()
+            .primary_language()
     )
 }
 
 // Tests from RFC 5646 2.2.2
 #[test]
 fn test_extended_language() {
-    fn parts(tag: &LanguageTag) -> (&str, &str, Option<&str>, Vec<&str>) {
+    fn parts(tag: &LanguageTag<String>) -> (&str, &str, Option<&str>, Vec<&str>) {
         (
             tag.full_language(),
             tag.primary_language(),
@@ -107,7 +141,7 @@ fn test_extended_language() {
 // Tests from RFC 5646 2.2.3
 #[test]
 fn test_script() {
-    fn parts(tag: &LanguageTag) -> (&str, Option<&str>) {
+    fn parts(tag: &LanguageTag<String>) -> (&str, Option<&str>) {
         (tag.primary_language(), tag.script())
     }
 
@@ -118,7 +152,7 @@ fn test_script() {
 // Tests from RFC 5646 2.2.4
 #[test]
 fn test_region() {
-    fn parts(tag: &LanguageTag) -> (&str, Option<&str>, Option<&str>) {
+    fn parts(tag: &LanguageTag<String>) -> (&str, Option<&str>, Option<&str>) {
         (tag.primary_language(), tag.script(), tag.region())
     }
 
@@ -135,7 +169,7 @@ fn test_region() {
 // Tests from RFC 5646 2.2.5
 #[test]
 fn test_variant() {
-    fn parts(tag: &LanguageTag) -> (&str, Option<&str>, Vec<&str>) {
+    fn parts(tag: &LanguageTag<String>) -> (&str, Option<&str>, Vec<&str>) {
         (
             tag.primary_language(),
             tag.variant(),
@@ -161,7 +195,7 @@ fn test_variant() {
 // Tests from RFC 5646 2.2.6
 #[test]
 fn test_extension() {
-    fn parts(tag: &LanguageTag) -> (&str, Option<&str>, Vec<(char, &str)>) {
+    fn parts(tag: &LanguageTag<String>) -> (&str, Option<&str>, Vec<(char, &str)>) {
         (
             tag.primary_language(),
             tag.extension(),
@@ -208,7 +242,7 @@ fn test_extension() {
 // Tests from RFC 5646 2.2.7
 #[test]
 fn test_privateuse() {
-    fn parts(tag: &LanguageTag) -> (&str, Option<&str>, Vec<&str>) {
+    fn parts(tag: &LanguageTag<String>) -> (&str, Option<&str>, Vec<&str>) {
         (
             tag.primary_language(),
             tag.private_use(),
@@ -235,94 +269,43 @@ fn test_privateuse() {
     )
 }
 
-// Tests from RFC 5646 2.2.9
-#[test]
-fn test_is_valid() {
-    let valid_tags = vec![
-        "sr-Latn-RS",
-        "zh-gan",
-        "zh-Latn-wadegile",
-        "en-unifon",
-        "en-a-bbb-x-a-ccc",
-        "ccd",
-        "qra",
-        "en-Qabx",
-        "en-QU",
-        "en-XD",
-        "qqq-Latn-RS",
-    ];
-    for valid_tag in valid_tags {
-        let validation = LanguageTag::parse(valid_tag).unwrap().validate();
-        assert!(
-            validation.is_ok(),
-            "{} is considered invalid: {}",
-            valid_tag,
-            validation.err().unwrap()
-        );
-    }
-}
-
-#[test]
-fn test_is_not_valid() {
-    let invalid_tags = vec![
-        "zzz-Latn-RS",
-        "sr-Latq-RS",
-        "sr-Latn-ZY",
-        "de-gan",
-        "zhb-gan",
-        "zh-Hans-wadegile",
-        "de-unifon",
-        "ena-unifon",
-        "de-DE-1901-aaaaa-1901",
-        "en-a-bbb-a-ccc",
-        "ab-c-abc-r-toto-c-abc",
-    ];
-    for invalid_tag in invalid_tags {
-        assert!(
-            !LanguageTag::parse(invalid_tag).unwrap().is_valid(),
-            "{} is considered valid",
-            invalid_tag
-        );
-    }
-}
-
 #[test]
 fn test_fmt() {
     assert_eq!(
         "ar-arb-Latn-DE-nedis-foobar",
-        LanguageTag::parse("ar-arb-Latn-DE-nedis-foobar")
+        LanguageTag::parse_and_normalize("ar-arb-Latn-DE-nedis-foobar")
             .unwrap()
-            .to_string()
+            .as_str()
     );
     assert_eq!(
         "ar-arb-Latn-DE-nedis-foobar",
-        LanguageTag::parse("ar-arb-latn-de-nedis-foobar")
+        LanguageTag::parse_and_normalize("ar-arb-latn-de-nedis-foobar")
             .unwrap()
-            .to_string()
+            .as_str()
     );
     assert_eq!(
         "ar-arb-Latn-DE-nedis-foobar",
-        LanguageTag::parse("AR-ARB-LATN-DE-NEDIS-FOOBAR")
+        LanguageTag::parse_and_normalize("AR-ARB-LATN-DE-NEDIS-FOOBAR")
             .unwrap()
-            .to_string()
+            .as_str()
     );
     assert_eq!(
         "xx-z-foo-a-bar-f-spam-b-eggs",
-        LanguageTag::parse("xx-z-foo-a-bar-F-spam-b-eggs")
+        LanguageTag::parse_and_normalize("xx-z-foo-a-bar-F-spam-b-eggs")
             .unwrap()
-            .to_string()
+            .as_str()
     );
     assert_eq!(
         "hkgnmerm-x-e5-zf-vddjcpz-1v6",
-        LanguageTag::parse("HkgnmerM-x-e5-zf-VdDjcpz-1V6")
+        LanguageTag::parse_and_normalize("HkgnmerM-x-e5-zf-VdDjcpz-1V6")
             .unwrap()
             .to_string()
     );
     assert_eq!(
         "mgxqa-Ywep-8lcw-7bvt-h-dp1md-0h7-0z3ir",
-        LanguageTag::parse("MgxQa-ywEp-8lcW-7bvT-h-dP1Md-0h7-0Z3ir")
+        LanguageTag::parse_and_normalize("MgxQa-ywEp-8lcW-7bvT-h-dP1Md-0h7-0Z3ir")
             .unwrap()
-            .to_string()
+            .as_str()
     );
 }
 
@@ -334,62 +317,13 @@ fn test_unicode() {
 #[test]
 fn test_cmp() {
     assert_eq!(
-        LanguageTag::parse("dE-AraB-lY"),
-        LanguageTag::parse("DE-aRaB-LY")
+        LanguageTag::parse_and_normalize("dE-AraB-lY").unwrap(),
+        LanguageTag::parse_and_normalize("DE-aRaB-LY").unwrap()
     );
-    assert_ne!(LanguageTag::parse("zh"), LanguageTag::parse("zh-Latn"));
-}
-
-// Tests from RFC 5646 4.5
-#[test]
-fn test_canonicalize() {
-    let conversion = vec![
-        ("sgn-BE-FR", "sfb"),
-        ("no-nyn", "nn"),
-        ("i-klingon", "tlh"),
-        ("zh-hak", "hak"),
-        ("en-BU", "en-MM"),
-        ("iw", "he"),
-        ("en-ZR", "en-CD"),
-        ("sh-yue", "yue"),
-        ("zh-yue-Hant-HK", "yue-Hant-HK"),
-        ("is-Latn", "is"),
-        ("ja-Latn-heploc", "ja-Latn-alalc97"),
-        ("sl-nedis-metelko-nedis", "sl-nedis-metelko"),
-        ("ja-Latn-hepburn-heploc", "ja-Latn-hepburn-alalc97"),
-        ("en-b-warble-a-babble", "en-a-babble-b-warble"),
-        ("en-b-ccc-bbb-a-aaa-X-xyz", "en-a-aaa-b-ccc-bbb-x-xyz"),
-        ("en-r-az-r-qt", "en-r-az-r-qt"),
-        ("en-r-qt-r-az", "en-r-az-r-qt"),
-    ];
-    for (input, output) in conversion {
-        let canonicalization = LanguageTag::parse(input).unwrap().canonicalize();
-        assert!(
-            canonicalization.is_ok(),
-            "Canonicalization of {} failed: {}",
-            input,
-            canonicalization.err().unwrap()
-        );
-        assert_eq!(
-            LanguageTag::parse(output).unwrap(),
-            canonicalization.unwrap()
-        );
-    }
-}
-
-#[test]
-fn test_canonicalize_fail() {
-    let invalid_tags = vec!["zh-cmn-cpx"];
-    for invalid_tag in invalid_tags {
-        assert!(
-            LanguageTag::parse(invalid_tag)
-                .unwrap()
-                .canonicalize()
-                .is_err(),
-            "{} canonicalization succeeded",
-            invalid_tag
-        );
-    }
+    assert_ne!(
+        LanguageTag::parse_and_normalize("zh").unwrap(),
+        LanguageTag::parse_and_normalize("zh-Latn").unwrap()
+    );
 }
 
 // http://www.langtag.net/test-suites/well-formed-tags.txt
@@ -456,7 +390,7 @@ fn test_wellformed_tags() {
         "xr-p-lze",   // Extension
     ];
     for tag in tags {
-        let result = LanguageTag::from_str(tag);
+        let result = LanguageTag::parse(tag);
         assert!(
             result.is_ok(),
             "{} should be considered well-formed but returned error {}",
@@ -466,26 +400,11 @@ fn test_wellformed_tags() {
     }
 }
 
-#[test]
-fn test_match() {
-    let de_latn_de: LanguageTag = "de-Latn-DE".parse().unwrap();
-    let de_de: LanguageTag = "de-DE".parse().unwrap();
-    let de: LanguageTag = "de".parse().unwrap();
-    assert!(de.matches(&de));
-    assert!(de.matches(&de_de));
-    assert!(de.matches(&de_latn_de));
-    assert!(!de_de.matches(&de));
-    assert!(de_de.matches(&de_de));
-    assert!(de_de.matches(&de_latn_de));
-    assert!(!de_latn_de.matches(&de));
-    assert!(!de_latn_de.matches(&de_de));
-    assert!(de_latn_de.matches(&de_latn_de));
-}
-
 // http://www.langtag.net/test-suites/broken-tags.txt
 #[test]
 fn test_broken_tags() {
     let tags = vec![
+        "",
         "f",
         "f-Latn",
         "fr-Latn-F",
@@ -514,123 +433,13 @@ fn test_broken_tags() {
         "aabbccddE",
     ];
     for tag in tags {
-        let result = LanguageTag::from_str(tag);
+        let result = LanguageTag::parse(tag);
         assert!(
             result.is_err(),
             "{} should be considered not well-formed but returned result {:?}",
             tag,
             result.ok().unwrap()
         );
-    }
-}
-
-// http://www.langtag.net/test-suites/valid-tags.txt
-#[test]
-fn test_valid_tags() {
-    let tags = vec![
-        "fr",
-        "fr-Latn",
-        //Not valid "fr-fra", // Extended tag
-        "fr-Latn-FR",
-        "fr-Latn-419",
-        "fr-FR",
-        "fr-y-myext-myext2",
-        "apa-Latn", // ISO 639 can be 3-letters
-        "apa",
-        "apa-CA",
-        "i-klingon", // grandfathered with singleton
-        "no-bok",    // grandfathered without singleton
-        //Not valid "fr-Lat",    // Extended
-        "mn-Cyrl-MN",
-        "mN-cYrL-Mn",
-        "fr-Latn-CA",
-        "en-US",
-        "fr-Latn-CA",
-        "i-enochian", // Grand fathered
-        "x-fr-CH",
-        "sr-Latn-CS",
-        "es-419",
-        "sl-nedis",
-        "de-CH-1996",
-        "de-Latg-1996",
-        "sl-IT-nedis",
-        "en-a-bbb-x-a-ccc",
-        "de-a-value",
-        "en-x-US",
-        "az-Arab-x-AZE-derbend",
-        "es-Latn-CO-x-private",
-        "ab-x-abc-x-abc", // anything goes after x
-        "ab-x-abc-a-a",   // ditto
-        "i-default",      // grandfathered
-        "i-klingon",      // grandfathered
-        "en",
-        "de-AT",
-        "es-419",
-        "de-CH-1901",
-        "sr-Cyrl",
-        "sr-Cyrl-CS",
-        "sl-Latn-IT-rozaj",
-        "en-US-x-twain",
-        "zh-cmn",
-        "zh-cmn-Hant",
-        "zh-cmn-Hant-HK",
-        "zh-gan",
-        "zh-yue-Hant-HK",
-        "en-Latn-GB-boont-r-extended-sequence-x-private",
-        "en-US-boont",
-    ];
-    for tag in tags {
-        let result = LanguageTag::from_str(tag);
-        assert!(
-            result.is_ok(),
-            "{} should be considered well-formed but returned error {}",
-            tag,
-            result.err().unwrap()
-        );
-        let tag = result.unwrap();
-        let validation = tag.validate();
-        assert!(
-            validation.is_ok(),
-            "{} should be considered valid but returned error {}",
-            tag,
-            validation.err().unwrap()
-        );
-        let canonicalization = tag.canonicalize();
-        assert!(
-            canonicalization.is_ok(),
-            "{} canonicalization should not fail but returned error {}",
-            tag,
-            canonicalization.err().unwrap()
-        );
-    }
-}
-
-// http://www.langtag.net/test-suites/invalid-tags.txt
-#[test]
-fn test_invalid_tags() {
-    let tags = vec![
-        "en-a-bbb-a-ccc",        // 'a' appears twice, moved from broken_tags
-        "ab-c-abc-r-toto-c-abc", // 'c' appears twice ", moved from broken_tags
-        "ax-TZ",                 // Not in the registry, but well-formed
-        "fra-Latn",              // ISO 639 can be 3-letters
-        "fra",
-        "fra-FX",
-        "abcd-Latn",          // Language of 4 chars reserved for future use
-        "AaBbCcDd-x-y-any-x", // Language of 5-8 chars, registered
-        "zh-Latm-CN",         // Typo
-        "de-DE-1902",         // Wrong variant
-        "fr-shadok",          // Variant
-    ];
-    for tag in tags {
-        let result = LanguageTag::from_str(tag);
-        assert!(
-            result.is_ok(),
-            "{} should be considered well-formed but returned error {}",
-            tag,
-            result.err().unwrap()
-        );
-        let validation = result.unwrap().validate();
-        assert!(validation.is_err(), "{} should be considered invalid", tag);
     }
 }
 
@@ -746,7 +555,7 @@ fn test_random_good_tags() {
         "uZIAZ-Xmbh-pd",
     ];
     for tag in tags {
-        let result = LanguageTag::from_str(tag);
+        let result = LanguageTag::parse(tag);
         assert!(
             result.is_ok(),
             "{} should be considered well-formed but returned error {}",
@@ -856,7 +665,7 @@ fn test_random_bad_tags() {
         "rby-w",
     ];
     for tag in tags {
-        let result = LanguageTag::from_str(tag);
+        let result = LanguageTag::parse(tag);
         assert!(
             result.is_err(),
             "{} should be considered not well-formed but returned result {:?}",
@@ -864,4 +673,26 @@ fn test_random_bad_tags() {
             result.ok().unwrap()
         );
     }
+}
+
+#[test]
+fn test_eq() {
+    let tag = LanguageTag::parse("en-fr").unwrap();
+    assert_eq!(tag, "en-fr");
+    assert_ne!(tag, "en-FR");
+    assert_eq!("en-fr", tag);
+    assert_eq!(hash(&tag), hash("en-fr"));
+    assert_ne!(hash(&tag), hash("en-FR"));
+}
+
+fn hash(value: impl Hash) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    value.hash(&mut hasher);
+    hasher.finish()
+}
+
+#[test]
+fn test_str() {
+    let tag = LanguageTag::parse("en-fr").unwrap();
+    assert!(tag.starts_with("en-"));
 }

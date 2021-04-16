@@ -1,178 +1,235 @@
-#![deny(missing_docs)]
-#![cfg_attr(test, deny(warnings))]
-
-//! Language tags can be used identify human languages, scripts e.g. Latin script, countries and
-//! other regions.
+//! Utilities to validate language tags following [RFC 5646](https://tools.ietf.org/html/rfc5646)
+//! ([BCP 47](https://tools.ietf.org/html/bcp47)).
 //!
-//! Language tags are defined in [BCP47](http://tools.ietf.org/html/bcp47), an introduction is
-//! ["Language tags in HTML and XML"](http://www.w3.org/International/articles/language-tags/) by
-//! the W3C. They are commonly used in HTML and HTTP `Content-Language` and `Accept-Language`
-//! header fields.
-//!
-//! This package currently supports parsing (fully conformant parser), validation, canonicalization,
-//! formatting and comparing language tags.
-//!
-//! # Examples
-//! Create a simple language tag representing the French language as spoken
-//! in Belgium and print it:
-//!
-//! ```rust
-//! use language_tags::LanguageTag;
-//! let langtag = LanguageTag::parse("fr-BE").unwrap();
-//! assert_eq!(format!("{}", langtag), "fr-BE");
 //! ```
+//! use oxilangtag::LanguageTag;
 //!
-//! Parse a tag representing a special type of English specified by private agreement:
+//! // Parsing and validation
+//! let language_tag = LanguageTag::parse("zh-cmn-Hans-CN-x-test").unwrap();
+//! assert_eq!(language_tag.as_str(), "zh-cmn-Hans-CN-x-test");
 //!
-//! ```rust
-//! use language_tags::LanguageTag;
-//! use std::iter::FromIterator;
-//! let langtag: LanguageTag = "en-x-twain".parse().unwrap();
-//! assert_eq!(langtag.primary_language(), "en");
-//! assert_eq!(Vec::from_iter(langtag.private_use_subtags()), vec!["twain"]);
+//! // Language tag components
+//! assert_eq!(language_tag.primary_language(), "zh");
+//! assert_eq!(language_tag.extended_language(), Some("cmn"));
+//! assert_eq!(language_tag.full_language(), "zh-cmn");
+//! assert_eq!(language_tag.script(), Some("Hans"));
+//! assert_eq!(language_tag.region(), Some("CN"));
+//! assert_eq!(language_tag.extension(), None);
+//! assert_eq!(language_tag.private_use_subtags().collect::<Vec<_>>(), vec!["test"]);
 //! ```
-//!
-//! You can check for equality, but more often you should test if two tags match.
-//! In this example we check if the resource in German language is suitable for
-//! a user from Austria. While people speaking Austrian German normally understand
-//! standard German the opposite is not always true. So the resource can be presented
-//! to the user but if the resource was in `de-AT` and a user asked for a representation
-//! in `de` the request should be rejected.
-//!
-//!
-//! ```rust
-//! use language_tags::LanguageTag;
-//! let mut langtag_server = LanguageTag::parse("de-AT").unwrap();
-//! let mut langtag_user = LanguageTag::parse("de").unwrap();
-//! assert!(langtag_user.matches(&langtag_server));
-//! ```
+#![deny(
+    future_incompatible,
+    nonstandard_style,
+    rust_2018_idioms,
+    missing_copy_implementations,
+    trivial_casts,
+    trivial_numeric_casts,
+    unsafe_code,
+    unused_qualifications
+)]
 
-mod iana_registry;
-
-use crate::iana_registry::*;
+use std::borrow::{Borrow, Cow};
+use std::cmp::Ordering;
 use std::error::Error;
 use std::fmt;
+use std::hash::{Hash, Hasher};
 use std::iter::once;
 use std::ops::Deref;
-use std::str::FromStr;
-use std::str::Split;
+use std::str::{FromStr, Split};
 
-/// A language tag as described in [RFC 5646](https://tools.ietf.org/html/rfc5646).
+/// A [RFC 5646](https://tools.ietf.org/html/rfc5646) language tag.
 ///
-/// Language tags are used to help identify languages, whether spoken,
-/// written, signed, or otherwise signaled, for the purpose of
-/// communication.  This includes constructed and artificial languages
-/// but excludes languages not intended primarily for human
-/// communication, such as programming languages.
-#[derive(Eq, PartialEq, Debug, Clone, Hash)]
-pub struct LanguageTag {
-    /// Syntax described in [RFC 5646 2.1](https://tools.ietf.org/html/rfc5646#section-2.1)
-    serialization: String,
-    language_end: usize,
-    extlang_end: usize,
-    script_end: usize,
-    region_end: usize,
-    variant_end: usize,
-    extension_end: usize,
+/// ```
+/// use oxilangtag::LanguageTag;
+///
+/// let language_tag = LanguageTag::parse("en-us").unwrap();
+/// assert_eq!(language_tag.into_inner(), "en-us")
+/// ```
+#[derive(Clone, Copy)]
+pub struct LanguageTag<T> {
+    tag: T,
+    positions: TagElementsPositions,
 }
 
-impl LanguageTag {
-    /// Return the serialization of this language tag.
+impl<T: Deref<Target = str>> LanguageTag<T> {
+    /// Parses a language tag acccording to [RFC 5646](https://tools.ietf.org/html/rfc5646).
+    /// and checks if the tag is ["well-formed"](https://tools.ietf.org/html/rfc5646#section-2.2.9).
     ///
-    /// This is fast since that serialization is already stored in the `LanguageTag` struct.
+    /// This operation keeps internally the `tag` parameter and does not allocate on the heap.
+    ///
+    /// ```
+    /// use oxilangtag::LanguageTag;
+    ///
+    /// let language_tag = LanguageTag::parse("en-us").unwrap();
+    /// assert_eq!(language_tag.into_inner(), "en-us")
+    /// ```
+    pub fn parse(tag: T) -> Result<Self, LanguageTagParseError> {
+        let positions = parse_language_tag(&tag, &mut VoidOutputBuffer::default())?;
+        Ok(Self { tag, positions })
+    }
+
+    /// Returns the underlying language tag representation.
     #[inline]
     pub fn as_str(&self) -> &str {
-        &self.serialization
+        &self.tag
     }
 
-    /// Return the serialization of this language tag.
-    ///
-    /// This consumes the `LanguageTag` and takes ownership of the `String` stored in it.
+    /// Returns the underlying language tag representation.
     #[inline]
-    pub fn into_string(self) -> String {
-        self.serialization
+    pub fn into_inner(self) -> T {
+        self.tag
     }
 
-    /// Return the [primary language subtag](https://tools.ietf.org/html/rfc5646#section-2.2.1).
+    /// Returns the [primary language subtag](https://tools.ietf.org/html/rfc5646#section-2.2.1).
+    ///
+    /// ```
+    /// use oxilangtag::LanguageTag;
+    ///
+    /// let language_tag = LanguageTag::parse("zh-cmn-Hans-CN").unwrap();
+    /// assert_eq!(language_tag.primary_language(), "zh");
+    /// ```
     #[inline]
     pub fn primary_language(&self) -> &str {
-        &self.serialization[..self.language_end]
+        &self.tag[..self.positions.language_end]
     }
 
-    /// Return the [extended language subtags](https://tools.ietf.org/html/rfc5646#section-2.2.2).
+    /// Returns the [extended language subtags](https://tools.ietf.org/html/rfc5646#section-2.2.2).
     ///
     /// Valid language tags have at most one extended language.
+    ///
+    /// ```
+    /// use oxilangtag::LanguageTag;
+    ///
+    /// let language_tag = LanguageTag::parse("zh-cmn-Hans-CN").unwrap();
+    /// assert_eq!(language_tag.extended_language(), Some("cmn"));
+    /// ```
     #[inline]
     pub fn extended_language(&self) -> Option<&str> {
-        if self.language_end == self.extlang_end {
+        if self.positions.language_end == self.positions.extlang_end {
             None
         } else {
-            Some(&self.serialization[self.language_end + 1..self.extlang_end])
+            Some(&self.tag[self.positions.language_end + 1..self.positions.extlang_end])
         }
     }
 
-    /// Iterate on the [extended language subtags](https://tools.ietf.org/html/rfc5646#section-2.2.2).
+    /// Iterates on the [extended language subtags](https://tools.ietf.org/html/rfc5646#section-2.2.2).
     ///
     /// Valid language tags have at most one extended language.
+    ///
+    /// ```
+    /// use oxilangtag::LanguageTag;
+    ///
+    /// let language_tag = LanguageTag::parse("zh-cmn-Hans-CN").unwrap();
+    /// assert_eq!(language_tag.extended_language_subtags().collect::<Vec<_>>(), vec!["cmn"]);
+    /// ```
     #[inline]
     pub fn extended_language_subtags(&self) -> impl Iterator<Item = &str> {
         self.extended_language().unwrap_or("").split_terminator('-')
     }
 
-    /// Return the [primary language subtag](https://tools.ietf.org/html/rfc5646#section-2.2.1)
+    /// Returns the [primary language subtag](https://tools.ietf.org/html/rfc5646#section-2.2.1)
     /// and its [extended language subtags](https://tools.ietf.org/html/rfc5646#section-2.2.2).
+    ///
+    /// ```
+    /// use oxilangtag::LanguageTag;
+    ///
+    /// let language_tag = LanguageTag::parse("zh-cmn-Hans-CN").unwrap();
+    /// assert_eq!(language_tag.full_language(), "zh-cmn");
+    /// ```
     #[inline]
     pub fn full_language(&self) -> &str {
-        &self.serialization[..self.extlang_end]
+        &self.tag[..self.positions.extlang_end]
     }
 
-    /// Return the [script subtag](https://tools.ietf.org/html/rfc5646#section-2.2.3).
+    /// Returns the [script subtag](https://tools.ietf.org/html/rfc5646#section-2.2.3).
+    ///
+    /// ```
+    /// use oxilangtag::LanguageTag;
+    ///
+    /// let language_tag = LanguageTag::parse("zh-cmn-Hans-CN").unwrap();
+    /// assert_eq!(language_tag.script(), Some("Hans"));
+    /// ```
     #[inline]
     pub fn script(&self) -> Option<&str> {
-        if self.extlang_end == self.script_end {
+        if self.positions.extlang_end == self.positions.script_end {
             None
         } else {
-            Some(&self.serialization[self.extlang_end + 1..self.script_end])
+            Some(&self.tag[self.positions.extlang_end + 1..self.positions.script_end])
         }
     }
 
-    /// Return the [region subtag](https://tools.ietf.org/html/rfc5646#section-2.2.4).
+    /// Returns the [region subtag](https://tools.ietf.org/html/rfc5646#section-2.2.4).
+    ///
+    /// ```
+    /// use oxilangtag::LanguageTag;
+    ///
+    /// let language_tag = LanguageTag::parse("zh-cmn-Hans-CN").unwrap();
+    /// assert_eq!(language_tag.region(), Some("CN"));
+    /// ```
     #[inline]
     pub fn region(&self) -> Option<&str> {
-        if self.script_end == self.region_end {
+        if self.positions.script_end == self.positions.region_end {
             None
         } else {
-            Some(&self.serialization[self.script_end + 1..self.region_end])
+            Some(&self.tag[self.positions.script_end + 1..self.positions.region_end])
         }
     }
 
-    /// Return the [variant subtags](https://tools.ietf.org/html/rfc5646#section-2.2.5).
+    /// Returns the [variant subtags](https://tools.ietf.org/html/rfc5646#section-2.2.5).
+    ///
+    /// ```
+    /// use oxilangtag::LanguageTag;
+    ///
+    /// let language_tag = LanguageTag::parse("zh-Latn-TW-pinyin").unwrap();
+    /// assert_eq!(language_tag.variant(), Some("pinyin"));
+    /// ```
     #[inline]
     pub fn variant(&self) -> Option<&str> {
-        if self.region_end == self.variant_end {
+        if self.positions.region_end == self.positions.variant_end {
             None
         } else {
-            Some(&self.serialization[self.region_end + 1..self.variant_end])
+            Some(&self.tag[self.positions.region_end + 1..self.positions.variant_end])
         }
     }
 
-    /// Iterate on the [variant subtags](https://tools.ietf.org/html/rfc5646#section-2.2.5).
+    /// Iterates on the [variant subtags](https://tools.ietf.org/html/rfc5646#section-2.2.5).
+    ///
+    /// ```
+    /// use oxilangtag::LanguageTag;
+    ///
+    /// let language_tag = LanguageTag::parse("zh-Latn-TW-pinyin").unwrap();
+    /// assert_eq!(language_tag.variant_subtags().collect::<Vec<_>>(), vec!["pinyin"]);
+    /// ```
     #[inline]
     pub fn variant_subtags(&self) -> impl Iterator<Item = &str> {
         self.variant().unwrap_or("").split_terminator('-')
     }
 
-    /// Return the [extension subtags](https://tools.ietf.org/html/rfc5646#section-2.2.6).
+    /// Returns the [extension subtags](https://tools.ietf.org/html/rfc5646#section-2.2.6).
+    ///
+    /// ```
+    /// use oxilangtag::LanguageTag;
+    ///
+    /// let language_tag = LanguageTag::parse("de-DE-u-co-phonebk").unwrap();
+    /// assert_eq!(language_tag.extension(), Some("u-co-phonebk"));
+    /// ```
     #[inline]
     pub fn extension(&self) -> Option<&str> {
-        if self.variant_end == self.extension_end {
+        if self.positions.variant_end == self.positions.extension_end {
             None
         } else {
-            Some(&self.serialization[self.variant_end + 1..self.extension_end])
+            Some(&self.tag[self.positions.variant_end + 1..self.positions.extension_end])
         }
     }
 
-    /// Iterate on the [extension subtags](https://tools.ietf.org/html/rfc5646#section-2.2.6).
+    /// Iterates on the [extension subtags](https://tools.ietf.org/html/rfc5646#section-2.2.6).
+    ///
+    /// ```
+    /// use oxilangtag::LanguageTag;
+    ///
+    /// let language_tag = LanguageTag::parse("de-DE-u-co-phonebk").unwrap();
+    /// assert_eq!(language_tag.extension_subtags().collect::<Vec<_>>(), vec![('u', "co-phonebk")]);
+    /// ```
     #[inline]
     pub fn extension_subtags(&self) -> impl Iterator<Item = (char, &str)> {
         match self.extension() {
@@ -181,19 +238,33 @@ impl LanguageTag {
         }
     }
 
-    /// Return the [private use subtags](https://tools.ietf.org/html/rfc5646#section-2.2.7).
+    /// Returns the [private use subtags](https://tools.ietf.org/html/rfc5646#section-2.2.7).
+    ///
+    /// ```
+    /// use oxilangtag::LanguageTag;
+    ///
+    /// let language_tag = LanguageTag::parse("de-x-foo-bar").unwrap();
+    /// assert_eq!(language_tag.private_use(), Some("x-foo-bar"));
+    /// ```
     #[inline]
     pub fn private_use(&self) -> Option<&str> {
-        if self.serialization.starts_with("x-") {
-            Some(&self.serialization)
-        } else if self.extension_end == self.serialization.len() {
+        if self.tag.starts_with("x-") {
+            Some(&self.tag)
+        } else if self.positions.extension_end == self.tag.len() {
             None
         } else {
-            Some(&self.serialization[self.extension_end + 1..])
+            Some(&self.tag[self.positions.extension_end + 1..])
         }
     }
 
-    /// Iterate on the [private use subtags](https://tools.ietf.org/html/rfc5646#section-2.2.7).
+    /// Iterates on the [private use subtags](https://tools.ietf.org/html/rfc5646#section-2.2.7).
+    ///
+    /// ```
+    /// use oxilangtag::LanguageTag;
+    ///
+    /// let language_tag = LanguageTag::parse("de-x-foo-bar").unwrap();
+    /// assert_eq!(language_tag.private_use_subtags().collect::<Vec<_>>(), vec!["foo", "bar"]);
+    /// ```
     #[inline]
     pub fn private_use_subtags(&self) -> impl Iterator<Item = &str> {
         self.private_use()
@@ -201,396 +272,365 @@ impl LanguageTag {
             .unwrap_or("")
             .split_terminator('-')
     }
+}
 
-    /// Create a `LanguageTag` from its serialization.
+impl LanguageTag<String> {
+    /// Parses a language tag acccording to [RFC 5646](https://tools.ietf.org/html/rfc5646)
+    /// and normalizes its case.
     ///
     /// This parser accepts the language tags that are "well-formed" according to
     /// [RFC 5646](https://tools.ietf.org/html/rfc5646#section-2.2.9).
-    /// Full validation could be done with the `validate` method.
     ///
+    /// This operation does heap allocation.
     ///
-    /// # Errors
+    /// ```
+    /// use oxilangtag::LanguageTag;
     ///
-    /// If the language tag is not "well-formed" a `ParseError` variant will be returned.
-    pub fn parse(input: &str) -> Result<Self, ParseError> {
-        //grandfathered tags
-        if let Some(tag) = GRANDFATHEREDS
-            .iter()
-            .find(|record| record.eq_ignore_ascii_case(input))
-        {
-            // grandfathered tag
-            Ok(tag_from_primary_language(*tag))
-        } else if input.starts_with("x-") || input.starts_with("X-") {
-            // private use
-            if !is_alphanumeric_or_dash(input) {
-                Err(ParseError::ForbiddenChar)
-            } else if input.len() == 2 {
-                Err(ParseError::EmptyPrivateUse)
-            } else {
-                Ok(tag_from_primary_language(input.to_ascii_lowercase()))
-            }
-        } else {
-            parse_language_tag(input)
-        }
-    }
-
-    /// Check if the language tag is "valid" according to
-    /// [RFC 5646](https://tools.ietf.org/html/rfc5646#section-2.2.9).
-    ///
-    /// It applies the following steps:
-    ///
-    /// * grandfathereds and private use tags are valid
-    /// * There should be no more than one extended language subtag
-    ///   (c.f. [errata 5457](https://www.rfc-editor.org/errata/eid5457)).
-    /// * Primary language, extended language, script, region and variants should appear
-    ///   in the IANA Language Subtag Registry.
-    /// * Extended language and variants should have a correct prefix as set
-    ///   in the IANA Language Subtag Registry.
-    /// * There should be no duplicate variant and singleton (extension) subtags.
-    ///
-    ///
-    /// # Errors
-    ///
-    /// If the language tag is not "valid" a `ValidationError` variant will be returned.
-    pub fn validate(&self) -> Result<(), ValidationError> {
-        // The tag is well-formed.
-        // always ok
-
-        // Private tag
-        if self.serialization.starts_with("x-") {
-            return Ok(());
-        }
-
-        // The tag is in the list of grandfathered tags
-        if is_in_str_slice_set(&GRANDFATHEREDS, &self.serialization) {
-            return Ok(());
-        }
-
-        // There is no more than one extended language subtag.
-        // From [errata 5457](https://www.rfc-editor.org/errata/eid5457).
-        if let Some(extended_language) = self.extended_language() {
-            if extended_language.contains('-') {
-                return Err(ValidationError::MultipleExtendedLanguageSubtags);
-            }
-        }
-
-        // all of its primary language, extended language, script, region, and variant
-        // subtags appear in the IANA Language Subtag Registry as of the
-        // particular registry date.
-        let primary_language = self.primary_language();
-        if !between(primary_language, "qaa", "qtz")
-            && !is_in_from_str_slice_set(&LANGUAGES, primary_language)
-        {
-            return Err(ValidationError::PrimaryLanguageNotInRegistry);
-        }
-        if let Some(extended_language) = self.extended_language() {
-            if let Some(extended_language_prefix) =
-                find_in_from_str_slice_map(&EXTLANGS, extended_language)
-            {
-                if !self.serialization.starts_with(extended_language_prefix) {
-                    return Err(ValidationError::WrongExtendedLanguagePrefix);
-                }
-            } else {
-                return Err(ValidationError::ExtendedLanguageNotInRegistry);
-            }
-        }
-        if let Some(script) = self.script() {
-            if !between(script, "Qaaa", "Qabx") && !is_in_from_str_slice_set(&SCRIPTS, script) {
-                return Err(ValidationError::ScriptNotInRegistry);
-            }
-        }
-        if let Some(region) = self.region() {
-            if !between(region, "QM", "QZ")
-                && !between(region, "XA", "XZ")
-                && !is_in_from_str_slice_set(&REGIONS, region)
-            {
-                return Err(ValidationError::RegionNotInRegistry);
-            }
-        }
-        for variant in self.variant_subtags() {
-            if let Some(variant_prefixes) = find_in_str_slice_map(&VARIANTS, variant) {
-                if !variant_prefixes
-                    .split(' ')
-                    .any(|prefix| self.serialization.starts_with(prefix))
-                {
-                    return Err(ValidationError::WrongVariantPrefix);
-                }
-            } else {
-                return Err(ValidationError::VariantNotInRegistry);
-            }
-        }
-
-        // There are no duplicate variant subtags.
-        let with_duplicate_variant = self.variant_subtags().enumerate().any(|(id1, variant1)| {
-            self.variant_subtags()
-                .enumerate()
-                .any(|(id2, variant2)| id1 != id2 && variant1 == variant2)
-        });
-        if with_duplicate_variant {
-            return Err(ValidationError::DuplicateVariant);
-        }
-
-        // There are no duplicate singleton (extension) subtags.
-        if let Some(extension) = self.extension() {
-            let mut seen_extensions = AlphanumericLowerCharSet::new();
-            let with_duplicate_extension = extension.split('-').any(|subtag| {
-                if subtag.len() == 1 {
-                    let extension = subtag.chars().next().unwrap();
-                    if seen_extensions.contains(extension) {
-                        true
-                    } else {
-                        seen_extensions.insert(extension);
-                        false
-                    }
-                } else {
-                    false
-                }
-            });
-            if with_duplicate_extension {
-                return Err(ValidationError::DuplicateExtension);
-            }
-        }
-
-        Ok(())
-    }
-
-    /// Check if the language tag is valid according to
-    /// [RFC 5646](https://tools.ietf.org/html/rfc5646#section-2.2.9).
-    pub fn is_valid(&self) -> bool {
-        self.validate().is_ok()
-    }
-
-    /// Returns the canonical version of the language tag following
-    /// [RFC 5646 4.5](https://tools.ietf.org/html/rfc5646#section-4.5).
-    ///
-    /// It currently applies the following steps:
-    ///
-    /// * Grandfathered tags are replaced with the canonical version if possible.
-    /// * Redundant tags are replaced with the canonical version if possible.
-    /// * Extension languages are promoted to primary language.
-    /// * Deprecated languages, scripts, regions and variants are replaced with modern equivalents.
-    /// * Suppress-Script is applied to remove default script for a language (e.g. "en-Latn" is canonicalized as "en").
-    /// * Variants are deduplicated
-    ///
-    ///
-    /// # Errors
-    ///
-    /// If there is not a unique way to canonicalize the language tag
-    /// a `ValidationError` variant will be returned.
-    pub fn canonicalize(&self) -> Result<LanguageTag, ValidationError> {
-        //We could not do anything for private use
-        if self.serialization.starts_with("x-") {
-            return Ok(self.clone());
-        }
-
-        // 2 Redundant or grandfathered tags are replaced by their 'Preferred-Value', if there is one.
-        if is_in_str_slice_set(&GRANDFATHEREDS, &self.serialization) {
-            return Ok(
-                if let Some(preferred_value) =
-                    find_in_str_slice_map(&GRANDFATHEREDS_PREFERRED_VALUE, &self.serialization)
-                {
-                    Self::parse(preferred_value).unwrap()
-                } else {
-                    self.clone()
-                },
-            );
-        }
-        if let Some(preferred_value) =
-            find_in_str_slice_map(&REDUNDANTS_PREFERRED_VALUE, &self.serialization)
-        {
-            return Ok(Self::parse(preferred_value).unwrap());
-        }
-        //TODO: what if a redundant has a some extensions/private use?
-
-        // 3.  Subtags are replaced by their 'Preferred-Value', if there is one.
-        // Primary language
-        let mut primary_language = self.primary_language();
-        if let Some(preferred_value) =
-            find_in_from_str_slice_map(&LANGUAGES_PREFERRED_VALUE, primary_language)
-        {
-            primary_language = preferred_value;
-        }
-
-        // Extended language
-        // For extlangs, the original primary language subtag is also replaced if there is a primary language subtag in the 'Preferred-Value'.
-        let mut extended_language = None;
-        if let Some(extlang) = self.extended_language() {
-            // We fail if there is more than one (no single possible canonicalization)
-            if extlang.contains('-') {
-                return Err(ValidationError::MultipleExtendedLanguageSubtags);
-            }
-            if let Some(preferred_value) =
-                find_in_from_str_slice_map(&EXTLANGS_PREFERRED_VALUE, extlang)
-            {
-                primary_language = preferred_value;
-            } else {
-                extended_language = Some(extlang);
-            }
-        }
-
-        let mut serialization = String::with_capacity(self.serialization.len());
-        serialization.push_str(primary_language);
-        let language_end = serialization.len();
-        if let Some(extended_language) = extended_language {
-            serialization.push('-');
-            serialization.push_str(extended_language);
-        }
-        let extlang_end = serialization.len();
-
-        // Script
-        if let Some(script) = self.script() {
-            let script =
-                find_in_from_str_slice_map(&SCRIPTS_PREFERRED_VALUE, script).unwrap_or(script);
-
-            // Suppress-Script
-            let match_suppress_script =
-                find_in_from_str_slice_map(&LANGUAGES_SUPPRESS_SCRIPT, primary_language)
-                    .filter(|suppress_script| *suppress_script == script)
-                    .is_some();
-            if !match_suppress_script {
-                serialization.push('-');
-                serialization.push_str(script);
-            }
-        }
-        let script_end = serialization.len();
-
-        // Region
-        if let Some(region) = self.region() {
-            serialization.push('-');
-            serialization.push_str(
-                find_in_from_str_slice_map(&REGIONS_PREFERRED_VALUE, region).unwrap_or(region),
-            );
-        }
-        let region_end = serialization.len();
-
-        // Variant
-        for variant in self.variant_subtags() {
-            let variant =
-                *find_in_str_slice_map(&VARIANTS_PREFERRED_VALUE, variant).unwrap_or(&variant);
-            let variant_already_exists = serialization.split('-').any(|subtag| subtag == variant);
-            if !variant_already_exists {
-                serialization.push('-');
-                serialization.push_str(variant);
-            }
-        }
-        let variant_end = serialization.len();
-
-        //Extension
-        // 1.  Extension sequences are ordered into case-insensitive ASCII order by singleton subtags
-        if self.extension().is_some() {
-            let mut extensions: Vec<_> = self.extension_subtags().collect();
-            extensions.sort();
-            for (k, v) in extensions {
-                serialization.push('-');
-                serialization.push(k);
-                serialization.push('-');
-                serialization.push_str(v);
-            }
-        }
-        let extension_end = serialization.len();
-
-        //Private use
-        if let Some(private_use) = self.private_use() {
-            serialization.push('-');
-            serialization.push_str(private_use);
-        }
-
-        Ok(LanguageTag {
-            serialization,
-            language_end,
-            extlang_end,
-            script_end,
-            region_end,
-            variant_end,
-            extension_end,
+    /// let language_tag = LanguageTag::parse_and_normalize("en-us").unwrap();
+    /// assert_eq!(language_tag.into_inner(), "en-US")
+    /// ```
+    pub fn parse_and_normalize(tag: &str) -> Result<Self, LanguageTagParseError> {
+        let mut output_buffer = String::with_capacity(tag.len());
+        let positions = parse_language_tag(&tag, &mut output_buffer)?;
+        Ok(Self {
+            tag: output_buffer,
+            positions,
         })
     }
+}
 
-    /// Matches language tags. The first language acts as a language range, the second one is used
-    /// as a normal language tag. None fields in the language range are ignored. If the language
-    /// tag has more extlangs than the range these extlangs are ignored. Matches are
-    /// case-insensitive.
-    ///
-    /// For example the range `en-GB` matches only `en-GB` and `en-Arab-GB` but not `en`.
-    /// The range `en` matches all language tags starting with `en` including `en`, `en-GB`,
-    /// `en-Arab` and `en-Arab-GB`.
-    ///
-    /// # Panics
-    /// If the language range has extensions or private use tags.
-    ///
-    /// # Examples
-    /// ```rust
-    /// use language_tags::LanguageTag;
-    /// let range_italian = LanguageTag::parse("it").unwrap();
-    /// let tag_german = LanguageTag::parse("de").unwrap();
-    /// let tag_italian_switzerland = LanguageTag::parse("it-CH").unwrap();
-    /// assert!(!range_italian.matches(&tag_german));
-    /// assert!(range_italian.matches(&tag_italian_switzerland));
-    ///
-    /// let range_spanish_brazil = LanguageTag::parse("es-BR").unwrap();
-    /// let tag_spanish = LanguageTag::parse("es").unwrap();
-    /// assert!(!range_spanish_brazil.matches(&tag_spanish));
-    /// ```
-    pub fn matches(&self, other: &LanguageTag) -> bool {
-        fn matches_option(a: Option<&str>, b: Option<&str>) -> bool {
-            match (a, b) {
-                (Some(a), Some(b)) => a == b,
-                (None, _) => true,
-                (_, None) => false,
+impl<Lft: PartialEq<Rhs>, Rhs> PartialEq<LanguageTag<Rhs>> for LanguageTag<Lft> {
+    #[inline]
+    fn eq(&self, other: &LanguageTag<Rhs>) -> bool {
+        self.tag.eq(&other.tag)
+    }
+}
+
+impl<T: PartialEq<str>> PartialEq<str> for LanguageTag<T> {
+    #[inline]
+    fn eq(&self, other: &str) -> bool {
+        self.tag.eq(other)
+    }
+}
+
+impl<'a, T: PartialEq<&'a str>> PartialEq<&'a str> for LanguageTag<T> {
+    #[inline]
+    fn eq(&self, other: &&'a str) -> bool {
+        self.tag.eq(other)
+    }
+}
+
+impl<T: PartialEq<String>> PartialEq<String> for LanguageTag<T> {
+    #[inline]
+    fn eq(&self, other: &String) -> bool {
+        self.tag.eq(other)
+    }
+}
+
+impl<'a, T: PartialEq<Cow<'a, str>>> PartialEq<Cow<'a, str>> for LanguageTag<T> {
+    #[inline]
+    fn eq(&self, other: &Cow<'a, str>) -> bool {
+        self.tag.eq(other)
+    }
+}
+
+impl<T: PartialEq<str>> PartialEq<LanguageTag<T>> for str {
+    #[inline]
+    fn eq(&self, other: &LanguageTag<T>) -> bool {
+        other.tag.eq(self)
+    }
+}
+
+impl<'a, T: PartialEq<&'a str>> PartialEq<LanguageTag<T>> for &'a str {
+    #[inline]
+    fn eq(&self, other: &LanguageTag<T>) -> bool {
+        other.tag.eq(self)
+    }
+}
+
+impl<T: PartialEq<String>> PartialEq<LanguageTag<T>> for String {
+    #[inline]
+    fn eq(&self, other: &LanguageTag<T>) -> bool {
+        other.tag.eq(self)
+    }
+}
+
+impl<'a, T: PartialEq<Cow<'a, str>>> PartialEq<LanguageTag<T>> for Cow<'a, str> {
+    #[inline]
+    fn eq(&self, other: &LanguageTag<T>) -> bool {
+        other.tag.eq(self)
+    }
+}
+
+impl<T: Eq> Eq for LanguageTag<T> {}
+
+impl<T: Hash> Hash for LanguageTag<T> {
+    #[inline]
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.tag.hash(state)
+    }
+}
+
+impl<T: PartialOrd> PartialOrd for LanguageTag<T> {
+    #[inline]
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        self.tag.partial_cmp(&other.tag)
+    }
+}
+
+impl<T: Ord> Ord for LanguageTag<T> {
+    #[inline]
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.tag.cmp(&other.tag)
+    }
+}
+
+impl<T: Deref<Target = str>> Deref for LanguageTag<T> {
+    type Target = str;
+
+    #[inline]
+    fn deref(&self) -> &str {
+        self.tag.deref()
+    }
+}
+
+impl<T: AsRef<str>> AsRef<str> for LanguageTag<T> {
+    #[inline]
+    fn as_ref(&self) -> &str {
+        self.tag.as_ref()
+    }
+}
+
+impl<T: Borrow<str>> Borrow<str> for LanguageTag<T> {
+    #[inline]
+    fn borrow(&self) -> &str {
+        self.tag.borrow()
+    }
+}
+
+impl<T: fmt::Debug> fmt::Debug for LanguageTag<T> {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.tag.fmt(f)
+    }
+}
+
+impl<T: fmt::Display> fmt::Display for LanguageTag<T> {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.tag.fmt(f)
+    }
+}
+
+impl FromStr for LanguageTag<String> {
+    type Err = LanguageTagParseError;
+
+    #[inline]
+    fn from_str(tag: &str) -> Result<Self, LanguageTagParseError> {
+        Self::parse_and_normalize(tag)
+    }
+}
+
+impl<'a> From<LanguageTag<&'a str>> for LanguageTag<String> {
+    #[inline]
+    fn from(tag: LanguageTag<&'a str>) -> Self {
+        Self {
+            tag: tag.tag.into(),
+            positions: tag.positions,
+        }
+    }
+}
+
+impl<'a> From<LanguageTag<Cow<'a, str>>> for LanguageTag<String> {
+    #[inline]
+    fn from(tag: LanguageTag<Cow<'a, str>>) -> Self {
+        Self {
+            tag: tag.tag.into(),
+            positions: tag.positions,
+        }
+    }
+}
+
+impl From<LanguageTag<Box<str>>> for LanguageTag<String> {
+    #[inline]
+    fn from(tag: LanguageTag<Box<str>>) -> Self {
+        Self {
+            tag: tag.tag.into(),
+            positions: tag.positions,
+        }
+    }
+}
+
+impl<'a> From<LanguageTag<&'a str>> for LanguageTag<Cow<'a, str>> {
+    #[inline]
+    fn from(tag: LanguageTag<&'a str>) -> Self {
+        Self {
+            tag: tag.tag.into(),
+            positions: tag.positions,
+        }
+    }
+}
+
+impl<'a> From<LanguageTag<String>> for LanguageTag<Cow<'a, str>> {
+    #[inline]
+    fn from(tag: LanguageTag<String>) -> Self {
+        Self {
+            tag: tag.tag.into(),
+            positions: tag.positions,
+        }
+    }
+}
+
+/// An error raised during [`LanguageTag`](struct.LanguageTag.html) validation.
+#[derive(Debug)]
+pub struct LanguageTagParseError {
+    kind: TagParseErrorKind,
+}
+
+impl fmt::Display for LanguageTagParseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.kind {
+            TagParseErrorKind::EmptyExtension => {
+                write!(f, "If an extension subtag is present, it must not be empty")
+            }
+            TagParseErrorKind::EmptyPrivateUse => {
+                write!(f, "If the `x` subtag is present, it must not be empty")
+            }
+            TagParseErrorKind::ForbiddenChar => {
+                write!(f, "The langtag contains a char not allowed")
+            }
+            TagParseErrorKind::InvalidSubtag => write!(
+                f,
+                "A subtag fails to parse, it does not match any other subtags"
+            ),
+            TagParseErrorKind::InvalidLanguage => write!(f, "The given language subtag is invalid"),
+            TagParseErrorKind::SubtagTooLong => {
+                write!(f, "A subtag may be eight characters in length at maximum")
+            }
+            TagParseErrorKind::EmptySubtag => write!(f, "A subtag should not be empty"),
+            TagParseErrorKind::TooManyExtlangs => {
+                write!(f, "At maximum three extlangs are allowed")
             }
         }
-        fn matches_iter<'a>(
-            a: impl Iterator<Item = &'a str>,
-            b: impl Iterator<Item = &'a str>,
-        ) -> bool {
-            a.zip(b).all(|(x, y)| x == y)
+    }
+}
+
+impl Error for LanguageTagParseError {}
+
+#[derive(Debug)]
+enum TagParseErrorKind {
+    /// If an extension subtag is present, it must not be empty.
+    EmptyExtension,
+    /// If the `x` subtag is present, it must not be empty.
+    EmptyPrivateUse,
+    /// The langtag contains a char that is not A-Z, a-z, 0-9 or the dash.
+    ForbiddenChar,
+    /// A subtag fails to parse, it does not match any other subtags.
+    InvalidSubtag,
+    /// The given language subtag is invalid.
+    InvalidLanguage,
+    /// A subtag may be eight characters in length at maximum.
+    SubtagTooLong,
+    /// A subtag should not be empty.
+    EmptySubtag,
+    /// At maximum three extlangs are allowed, but zero to one extlangs are preferred.
+    TooManyExtlangs,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct TagElementsPositions {
+    language_end: usize,
+    extlang_end: usize,
+    script_end: usize,
+    region_end: usize,
+    variant_end: usize,
+    extension_end: usize,
+}
+
+trait OutputBuffer: Extend<char> {
+    fn push(&mut self, c: char);
+
+    fn push_str(&mut self, s: &str);
+}
+
+#[derive(Default)]
+struct VoidOutputBuffer {}
+
+impl OutputBuffer for VoidOutputBuffer {
+    #[inline]
+    fn push(&mut self, _: char) {}
+
+    #[inline]
+    fn push_str(&mut self, _: &str) {}
+}
+
+impl Extend<char> for VoidOutputBuffer {
+    #[inline]
+    fn extend<T: IntoIterator<Item = char>>(&mut self, _: T) {}
+}
+
+impl OutputBuffer for String {
+    #[inline]
+    fn push(&mut self, c: char) {
+        self.push(c);
+    }
+
+    #[inline]
+    fn push_str(&mut self, s: &str) {
+        self.push_str(s);
+    }
+}
+
+/// Parses language tag following [the RFC5646 grammar](https://tools.ietf.org/html/rfc5646#section-2.1)
+fn parse_language_tag(
+    input: &str,
+    output: &mut impl OutputBuffer,
+) -> Result<TagElementsPositions, LanguageTagParseError> {
+    //grandfathered tags
+    if let Some(tag) = GRANDFATHEREDS
+        .iter()
+        .find(|record| record.eq_ignore_ascii_case(input))
+    {
+        output.push_str(tag);
+        Ok(TagElementsPositions {
+            language_end: tag.len(),
+            extlang_end: tag.len(),
+            script_end: tag.len(),
+            region_end: tag.len(),
+            variant_end: tag.len(),
+            extension_end: tag.len(),
+        })
+    } else if input.starts_with("x-") || input.starts_with("X-") {
+        // private use
+        if !is_alphanumeric_or_dash(input) {
+            Err(LanguageTagParseError {
+                kind: TagParseErrorKind::ForbiddenChar,
+            })
+        } else if input.len() == 2 {
+            Err(LanguageTagParseError {
+                kind: TagParseErrorKind::EmptyPrivateUse,
+            })
+        } else {
+            output.extend(input.chars().map(|c| c.to_ascii_lowercase()));
+            Ok(TagElementsPositions {
+                language_end: input.len(),
+                extlang_end: input.len(),
+                script_end: input.len(),
+                region_end: input.len(),
+                variant_end: input.len(),
+                extension_end: input.len(),
+            })
         }
-        assert!(self.is_language_range());
-        self.full_language() == other.full_language()
-            && matches_option(self.script(), other.script())
-            && matches_option(self.region(), other.region())
-            && matches_iter(self.variant_subtags(), other.variant_subtags())
-    }
-
-    /// Checks if it is a language range, meaning that there are no extension and privateuse tags.
-    pub fn is_language_range(&self) -> bool {
-        self.extension().is_none() && self.private_use().is_none()
-    }
-}
-
-impl FromStr for LanguageTag {
-    type Err = ParseError;
-
-    #[inline]
-    fn from_str(input: &str) -> Result<Self, ParseError> {
-        Self::parse(input)
-    }
-}
-
-impl fmt::Display for LanguageTag {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_str(self.as_str())
-    }
-}
-
-/// Builds a tag from its primary language
-fn tag_from_primary_language(tag: impl Into<String>) -> LanguageTag {
-    let serialization = tag.into();
-    let end = serialization.len();
-    LanguageTag {
-        serialization,
-        language_end: end,
-        extlang_end: end,
-        script_end: end,
-        region_end: end,
-        variant_end: end,
-        extension_end: end,
+    } else {
+        parse_langtag(input, output)
     }
 }
 
 /// Handles normal tags.
-fn parse_language_tag(input: &str) -> Result<LanguageTag, ParseError> {
+fn parse_langtag(
+    input: &str,
+    output: &mut impl OutputBuffer,
+) -> Result<TagElementsPositions, LanguageTagParseError> {
     #[derive(PartialEq, Eq)]
     enum State {
         Start,
@@ -602,8 +642,6 @@ fn parse_language_tag(input: &str) -> Result<LanguageTag, ParseError> {
         InPrivateUse { expected: bool },
     }
 
-    let mut serialization = String::with_capacity(input.len());
-
     let mut state = State::Start;
     let mut language_end = 0;
     let mut extlang_end = 0;
@@ -614,20 +652,24 @@ fn parse_language_tag(input: &str) -> Result<LanguageTag, ParseError> {
     let mut extlangs_count = 0;
     for (subtag, end) in SubTagIterator::new(input) {
         if subtag.is_empty() {
-            // All subtags have a maximum length of eight characters.
-            return Err(ParseError::EmptySubtag);
+            return Err(LanguageTagParseError {
+                kind: TagParseErrorKind::EmptySubtag,
+            });
         }
         if subtag.len() > 8 {
-            // All subtags have a maximum length of eight characters.
-            return Err(ParseError::SubtagTooLong);
+            return Err(LanguageTagParseError {
+                kind: TagParseErrorKind::SubtagTooLong,
+            });
         }
         if state == State::Start {
             // Primary language
             if subtag.len() < 2 || !is_alphabetic(subtag) {
-                return Err(ParseError::InvalidLanguage);
+                return Err(LanguageTagParseError {
+                    kind: TagParseErrorKind::InvalidLanguage,
+                });
             }
             language_end = end;
-            serialization.extend(to_lowercase(subtag));
+            output.extend(to_lowercase(subtag));
             if subtag.len() < 4 {
                 // extlangs are only allowed for short language tags
                 state = State::AfterLanguage;
@@ -636,53 +678,63 @@ fn parse_language_tag(input: &str) -> Result<LanguageTag, ParseError> {
             }
         } else if let State::InPrivateUse { .. } = state {
             if !is_alphanumeric(subtag) {
-                return Err(ParseError::InvalidSubtag);
+                return Err(LanguageTagParseError {
+                    kind: TagParseErrorKind::InvalidSubtag,
+                });
             }
-            serialization.push('-');
-            serialization.extend(to_lowercase(subtag));
+            output.push('-');
+            output.extend(to_lowercase(subtag));
             state = State::InPrivateUse { expected: false };
         } else if subtag == "x" || subtag == "X" {
             // We make sure extension is found
             if let State::InExtension { expected: true } = state {
-                return Err(ParseError::EmptyExtension);
+                return Err(LanguageTagParseError {
+                    kind: TagParseErrorKind::EmptyExtension,
+                });
             }
-            serialization.push('-');
-            serialization.push('x');
+            output.push('-');
+            output.push('x');
             state = State::InPrivateUse { expected: true };
         } else if subtag.len() == 1 && is_alphanumeric(subtag) {
             // We make sure extension is found
             if let State::InExtension { expected: true } = state {
-                return Err(ParseError::EmptyExtension);
+                return Err(LanguageTagParseError {
+                    kind: TagParseErrorKind::EmptyExtension,
+                });
             }
             let extension_tag = subtag.chars().next().unwrap().to_ascii_lowercase();
-            serialization.push('-');
-            serialization.push(extension_tag);
+            output.push('-');
+            output.push(extension_tag);
             state = State::InExtension { expected: true };
         } else if let State::InExtension { .. } = state {
             if !is_alphanumeric(subtag) {
-                return Err(ParseError::InvalidSubtag);
+                return Err(LanguageTagParseError {
+                    kind: TagParseErrorKind::InvalidSubtag,
+                });
             }
             extension_end = end;
-            serialization.push('-');
-            serialization.extend(to_lowercase(subtag));
+            output.push('-');
+            output.extend(to_lowercase(subtag));
             state = State::InExtension { expected: false };
         } else if state == State::AfterLanguage && subtag.len() == 3 && is_alphabetic(subtag) {
             extlangs_count += 1;
             if extlangs_count > 3 {
-                return Err(ParseError::TooManyExtlangs);
+                return Err(LanguageTagParseError {
+                    kind: TagParseErrorKind::TooManyExtlangs,
+                });
             }
             // valid extlangs
             extlang_end = end;
-            serialization.push('-');
-            serialization.extend(to_lowercase(subtag));
+            output.push('-');
+            output.extend(to_lowercase(subtag));
         } else if (state == State::AfterLanguage || state == State::AfterExtLang)
             && subtag.len() == 4
             && is_alphabetic(subtag)
         {
             // Script
             script_end = end;
-            serialization.push('-');
-            serialization.extend(to_uppercase_first(subtag));
+            output.push('-');
+            output.extend(to_uppercase_first(subtag));
             state = State::AfterScript;
         } else if (state == State::AfterLanguage
             || state == State::AfterExtLang
@@ -692,8 +744,8 @@ fn parse_language_tag(input: &str) -> Result<LanguageTag, ParseError> {
         {
             // Region
             region_end = end;
-            serialization.push('-');
-            serialization.extend(to_uppercase(subtag));
+            output.push('-');
+            output.extend(to_uppercase(subtag));
             state = State::AfterRegion;
         } else if (state == State::AfterLanguage
             || state == State::AfterExtLang
@@ -705,20 +757,26 @@ fn parse_language_tag(input: &str) -> Result<LanguageTag, ParseError> {
         {
             // Variant
             variant_end = end;
-            serialization.push('-');
-            serialization.extend(to_lowercase(subtag));
+            output.push('-');
+            output.extend(to_lowercase(subtag));
             state = State::AfterRegion;
         } else {
-            return Err(ParseError::InvalidSubtag);
+            return Err(LanguageTagParseError {
+                kind: TagParseErrorKind::InvalidSubtag,
+            });
         }
     }
 
     //We make sure we are in a correct final state
     if let State::InExtension { expected: true } = state {
-        return Err(ParseError::EmptyExtension);
+        return Err(LanguageTagParseError {
+            kind: TagParseErrorKind::EmptyExtension,
+        });
     }
     if let State::InPrivateUse { expected: true } = state {
-        return Err(ParseError::EmptyPrivateUse);
+        return Err(LanguageTagParseError {
+            kind: TagParseErrorKind::EmptyPrivateUse,
+        });
     }
 
     //We make sure we have not skipped anyone
@@ -738,8 +796,7 @@ fn parse_language_tag(input: &str) -> Result<LanguageTag, ParseError> {
         extension_end = variant_end;
     }
 
-    Ok(LanguageTag {
-        serialization,
+    Ok(TagElementsPositions {
         language_end,
         extlang_end,
         script_end,
@@ -787,6 +844,7 @@ struct SubTagIterator<'a> {
 }
 
 impl<'a> SubTagIterator<'a> {
+    #[inline]
     fn new(input: &'a str) -> Self {
         Self {
             split: input.split('-'),
@@ -798,6 +856,7 @@ impl<'a> SubTagIterator<'a> {
 impl<'a> Iterator for SubTagIterator<'a> {
     type Item = (&'a str, usize);
 
+    #[inline]
     fn next(&mut self) -> Option<(&'a str, usize)> {
         let tag = self.split.next()?;
         let tag_end = self.position + tag.len();
@@ -806,218 +865,68 @@ impl<'a> Iterator for SubTagIterator<'a> {
     }
 }
 
-struct AlphanumericLowerCharSet {
-    alphabetic_set: [bool; 26],
-    numeric_set: [bool; 10],
-}
-
-impl AlphanumericLowerCharSet {
-    fn new() -> Self {
-        Self {
-            alphabetic_set: [false; 26],
-            numeric_set: [false; 10],
-        }
-    }
-
-    fn contains(&mut self, c: char) -> bool {
-        if c.is_ascii_digit() {
-            self.numeric_set[char_sub(c, '0')]
-        } else if c.is_ascii_lowercase() {
-            self.alphabetic_set[char_sub(c, 'a')]
-        } else if c.is_ascii_uppercase() {
-            self.alphabetic_set[char_sub(c, 'A')]
-        } else {
-            false
-        }
-    }
-
-    fn insert(&mut self, c: char) {
-        if c.is_ascii_digit() {
-            self.numeric_set[char_sub(c, '0')] = true
-        } else if c.is_ascii_lowercase() {
-            self.alphabetic_set[char_sub(c, 'a')] = true
-        } else if c.is_ascii_uppercase() {
-            self.alphabetic_set[char_sub(c, 'A')] = true
-        }
-    }
-}
-
-fn char_sub(c1: char, c2: char) -> usize {
-    (c1 as usize) - (c2 as usize)
-}
-
+#[inline]
 fn is_alphabetic(s: &str) -> bool {
     s.chars().all(|x| x.is_ascii_alphabetic())
 }
 
+#[inline]
 fn is_numeric(s: &str) -> bool {
     s.chars().all(|x| x.is_ascii_digit())
 }
 
+#[inline]
 fn is_alphanumeric(s: &str) -> bool {
     s.chars().all(|x| x.is_ascii_alphanumeric())
 }
 
+#[inline]
 fn is_alphanumeric_or_dash(s: &str) -> bool {
     s.chars().all(|x| x.is_ascii_alphanumeric() || x == '-')
 }
 
-fn to_uppercase<'a>(s: &'a str) -> impl Iterator<Item = char> + 'a {
+#[inline]
+fn to_uppercase(s: &str) -> impl Iterator<Item = char> + '_ {
     s.chars().map(|c| c.to_ascii_uppercase())
 }
 
 // Beware: panics if s.len() == 0 (should never happen in our code)
-fn to_uppercase_first<'a>(s: &'a str) -> impl Iterator<Item = char> + 'a {
+#[inline]
+fn to_uppercase_first(s: &str) -> impl Iterator<Item = char> + '_ {
     let mut chars = s.chars();
     once(chars.next().unwrap().to_ascii_uppercase()).chain(chars.map(|c| c.to_ascii_lowercase()))
 }
 
-fn to_lowercase<'a>(s: &'a str) -> impl Iterator<Item = char> + 'a {
+#[inline]
+fn to_lowercase(s: &str) -> impl Iterator<Item = char> + '_ {
     s.chars().map(|c| c.to_ascii_lowercase())
 }
 
-/// Errors returned by `LanguageTag` parsing
-#[derive(Debug, Eq, PartialEq)]
-pub enum ParseError {
-    /// If an extension subtag is present, it must not be empty.
-    EmptyExtension,
-    /// If the `x` subtag is present, it must not be empty.
-    EmptyPrivateUse,
-    /// The langtag contains a char that is not A-Z, a-z, 0-9 or the dash.
-    ForbiddenChar,
-    /// A subtag fails to parse, it does not match any other subtags.
-    InvalidSubtag,
-    /// The given language subtag is invalid.
-    InvalidLanguage,
-    /// A subtag may be eight characters in length at maximum.
-    SubtagTooLong,
-    /// A subtag should not be empty.
-    EmptySubtag,
-    /// At maximum three extlangs are allowed, but zero to one extlangs are preferred.
-    TooManyExtlangs,
-}
-
-impl Error for ParseError {
-    fn description(&self) -> &str {
-        match self {
-            ParseError::EmptyExtension => "If an extension subtag is present, it must not be empty",
-            ParseError::EmptyPrivateUse => "If the `x` subtag is present, it must not be empty",
-            ParseError::ForbiddenChar => "The langtag contains a char not allowed",
-            ParseError::InvalidSubtag => {
-                "A subtag fails to parse, it does not match any other subtags"
-            }
-            ParseError::InvalidLanguage => "The given language subtag is invalid",
-            ParseError::SubtagTooLong => "A subtag may be eight characters in length at maximum",
-            ParseError::EmptySubtag => "A subtag should not be empty",
-            ParseError::TooManyExtlangs => "At maximum three extlangs are allowed",
-        }
-    }
-}
-
-impl fmt::Display for ParseError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_str(self.description())
-    }
-}
-
-/// Errors returned by the `LanguageTag` validation
-#[derive(Debug, Eq, PartialEq)]
-pub enum ValidationError {
-    /// The same variant subtag is only allowed once in a tag.
-    DuplicateVariant,
-    /// The same extension subtag is only allowed once in a tag before the private use part.
-    DuplicateExtension,
-    /// only one extended language subtag is allowed
-    MultipleExtendedLanguageSubtags,
-    /// The primary language is not in the IANA Language Subtag Registry
-    PrimaryLanguageNotInRegistry,
-    /// The extended language is not in the IANA Language Subtag Registry
-    ExtendedLanguageNotInRegistry,
-    /// The script is not in the IANA Language Subtag Registry
-    ScriptNotInRegistry,
-    /// The region is not in the IANA Language Subtag Registry
-    RegionNotInRegistry,
-    /// A variant is not in the IANA Language Subtag Registry
-    VariantNotInRegistry,
-    /// The primary language is not the expected extended language prefix from the IANA Language Subtag Registry
-    WrongExtendedLanguagePrefix,
-    /// The language tag has not one of the expected variant prefix from the IANA Language Subtag Registry
-    WrongVariantPrefix,
-}
-
-impl Error for ValidationError {
-    fn description(&self) -> &str {
-        match self {
-            ValidationError::DuplicateVariant => {
-                "The same variant subtag is only allowed once in a tag"
-            }
-            ValidationError::DuplicateExtension => {
-                "The same extension subtag is only allowed once in a tag"
-            }
-            ValidationError::MultipleExtendedLanguageSubtags => {
-                "only one extended language subtag is allowed"
-            }
-            ValidationError::PrimaryLanguageNotInRegistry => {
-                "The primary language is not in the IANA Language Subtag Registry"
-            }
-            ValidationError::ExtendedLanguageNotInRegistry => {
-                "The extended language is not in the IANA Language Subtag Registry"
-            }
-            ValidationError::ScriptNotInRegistry => {
-                "The script is not in the IANA Language Subtag Registry"
-            }
-            ValidationError::RegionNotInRegistry => {
-                "The region is not in the IANA Language Subtag Registry"
-            }
-            ValidationError::VariantNotInRegistry => {
-                "A variant is not in the IANA Language Subtag Registry"
-            }
-            ValidationError::WrongExtendedLanguagePrefix => {
-                "The primary language is not the expected extended language prefix from the IANA Language Subtag Registry"
-            }
-            ValidationError::WrongVariantPrefix => {
-                "The language tag has not one of the expected variant prefix from the IANA Language Subtag Registry"
-            }
-        }
-    }
-}
-
-impl fmt::Display for ValidationError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_str(self.description())
-    }
-}
-
-fn between<T: Ord>(value: T, start: T, end: T) -> bool {
-    start <= value && value <= end
-}
-
-fn is_in_str_slice_set(slice: &[&'static str], value: &str) -> bool {
-    slice.binary_search(&value).is_ok()
-}
-
-fn is_in_from_str_slice_set<T: Copy + Ord + FromStr>(slice: &[T], value: &str) -> bool {
-    match T::from_str(value) {
-        Ok(key) => slice.binary_search(&key).is_ok(),
-        Err(_) => false,
-    }
-}
-
-fn find_in_str_slice_map<'a, V>(slice: &'a [(&'static str, V)], value: &str) -> Option<&'a V> {
-    if let Ok(position) = slice.binary_search_by_key(&value, |t| t.0) {
-        Some(&slice[position].1)
-    } else {
-        None
-    }
-}
-
-fn find_in_from_str_slice_map<'a, K: Copy + Ord + FromStr, V: Deref<Target = str>>(
-    slice: &'a [(K, V)],
-    value: &str,
-) -> Option<&'a str> {
-    if let Ok(position) = slice.binary_search_by_key(&K::from_str(value).ok()?, |t| t.0) {
-        Some(&*slice[position].1)
-    } else {
-        None
-    }
-}
+const GRANDFATHEREDS: [&str; 26] = [
+    "art-lojban",
+    "cel-gaulish",
+    "en-GB-oed",
+    "i-ami",
+    "i-bnn",
+    "i-default",
+    "i-enochian",
+    "i-hak",
+    "i-klingon",
+    "i-lux",
+    "i-mingo",
+    "i-navajo",
+    "i-pwn",
+    "i-tao",
+    "i-tay",
+    "i-tsu",
+    "no-bok",
+    "no-nyn",
+    "sgn-BE-FR",
+    "sgn-BE-NL",
+    "sgn-CH-DE",
+    "zh-guoyu",
+    "zh-hakka",
+    "zh-min",
+    "zh-min-nan",
+    "zh-xiang",
+];
