@@ -35,7 +35,7 @@ assert_eq!(language_tag.private_use_subtags().collect::<Vec<_>>(), vec!["test"])
 
 ## License
 
-This project is licensed under the MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT).
+This project is licensed under the MIT license ([LICENSE-MIT](LICENSE-MIT) or `<http://opensource.org/licenses/MIT>`).
 
 It is based on the [`language-tags`](https://github.com/pyfisch/rust-language-tags/) crate by [pyfisch](https://github.com/pyfisch) under MIT license.
 

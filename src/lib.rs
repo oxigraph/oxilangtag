@@ -1,22 +1,4 @@
-//! Utilities to validate language tags following [RFC 5646](https://tools.ietf.org/html/rfc5646)
-//! ([BCP 47](https://tools.ietf.org/html/bcp47)).
-//!
-//! ```
-//! use oxilangtag::LanguageTag;
-//!
-//! // Parsing and validation
-//! let language_tag = LanguageTag::parse("zh-cmn-Hans-CN-x-test").unwrap();
-//! assert_eq!(language_tag.as_str(), "zh-cmn-Hans-CN-x-test");
-//!
-//! // Language tag components
-//! assert_eq!(language_tag.primary_language(), "zh");
-//! assert_eq!(language_tag.extended_language(), Some("cmn"));
-//! assert_eq!(language_tag.full_language(), "zh-cmn");
-//! assert_eq!(language_tag.script(), Some("Hans"));
-//! assert_eq!(language_tag.region(), Some("CN"));
-//! assert_eq!(language_tag.extension(), None);
-//! assert_eq!(language_tag.private_use_subtags().collect::<Vec<_>>(), vec!["test"]);
-//! ```
+#![doc = include_str!("../README.md")]
 #![deny(
     future_incompatible,
     nonstandard_style,
