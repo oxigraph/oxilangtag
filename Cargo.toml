@@ -1,6 +1,6 @@
 [package]
 name = "oxilangtag"
-version = "0.1.2"
+version = "0.2.0"
 authors = [
     "Tpt <thomas@pellissier-tanon.fr>"
 ]
@@ -13,9 +13,21 @@ Simple and fast implementation of language tag normalization and validation
 """
 edition = "2018"
 
+[features]
+default = []
+serde = ["serde/derive"]
+
+[dependencies.serde]
+version = "1.0"
+optional = true
+
 [dev-dependencies]
 criterion = "0.3"
 
 [[bench]]
 name = "lib"
 harness = false
+
+# enable serde in docs.rs
+[package.metadata.docs.rs]
+features = ["serde"]

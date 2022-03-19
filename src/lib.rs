@@ -12,12 +12,15 @@
 
 use std::borrow::{Borrow, Cow};
 use std::cmp::Ordering;
+use std::convert::TryFrom;
 use std::error::Error;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::iter::once;
 use std::ops::Deref;
 use std::str::{FromStr, Split};
+#[cfg(feature = "serde")]
+use std::ops::DerefMut;
 
 /// A [RFC 5646](https://tools.ietf.org/html/rfc5646) language tag.
 ///
@@ -27,7 +30,8 @@ use std::str::{FromStr, Split};
 /// let language_tag = LanguageTag::parse("en-us").unwrap();
 /// assert_eq!(language_tag.into_inner(), "en-us")
 /// ```
-#[derive(Clone, Copy)]
+// use 2 copies of LanguageTag to simplify serde derive
+#[derive(Copy, Clone)]
 pub struct LanguageTag<T> {
     tag: T,
     positions: TagElementsPositions,
@@ -463,6 +467,80 @@ impl<'a> From<LanguageTag<String>> for LanguageTag<Cow<'a, str>> {
     }
 }
 
+#[cfg(feature = "serde")]
+impl From<SerdeLanguageTag> for LanguageTag<String> {
+    fn from(slt: SerdeLanguageTag) -> Self {
+        slt.lang_tag
+    }
+}
+
+impl<T> Into<String> for LanguageTag<T> where T: Deref<Target = str> {
+    fn into(self) -> String {
+        self.as_str().to_string()
+    }
+}
+
+impl TryFrom<String> for LanguageTag<String> {
+    type Error = LanguageTagParseError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        LanguageTag::from_str(value.as_ref())
+    }
+}
+
+// #[doc(cfg(feature = "serde"))] wait for this to be stable
+#[cfg(feature = "serde")]
+/// Language Tag Type that is infallable when used with `serde`'s [decorators](https://serde.rs/container-attrs.html#from). This is accomplished
+/// by having a default trait that auto-resolves to `en-US`. You must have crate feature `serde` enabled to use this.
+///
+/// See [`LanguageTag`] for details.
+#[derive(Clone, Debug)]
+pub struct SerdeLanguageTag {
+    lang_tag: LanguageTag<String>
+}
+
+#[cfg(feature = "serde")]
+impl Deref for SerdeLanguageTag {
+    type Target = LanguageTag<String>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.lang_tag
+    }
+}
+
+#[cfg(feature = "serde")]
+impl Default for SerdeLanguageTag {
+    fn default() -> Self {
+        match LanguageTag::parse("en-US") {
+            Ok(lang_tag) => {
+                SerdeLanguageTag {
+                    lang_tag: LanguageTag::from(lang_tag)
+                }
+            }
+            Err(_) => {
+                // PANICS: This can never happen as en-US is a valid language tag. If this causes UB then it is a bug,
+                unreachable!("This is a bug. en-US is supposed to be a valid LangTag! Please report this bug to https://github.com/oxigraph/oxilangtag")
+            }
+        }
+    }
+}
+
+#[cfg(feature = "serde")]
+impl DerefMut for SerdeLanguageTag {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.lang_tag
+    }
+}
+
+#[cfg(feature = "serde")]
+impl From<LanguageTag<String>> for SerdeLanguageTag {
+    fn from(lang_tag: LanguageTag<String>) -> Self {
+        SerdeLanguageTag {
+            lang_tag
+        }
+    }
+}
+
 /// An error raised during [`LanguageTag`](struct.LanguageTag.html) validation.
 #[derive(Debug)]
 pub struct LanguageTagParseError {
@@ -519,7 +597,7 @@ enum TagParseErrorKind {
     TooManyExtlangs,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Copy, Clone, Debug)]
 struct TagElementsPositions {
     language_end: usize,
     extlang_end: usize,
