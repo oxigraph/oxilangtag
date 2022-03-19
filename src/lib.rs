@@ -541,6 +541,27 @@ impl From<LanguageTag<String>> for SerdeLanguageTag {
     }
 }
 
+#[cfg(feature = "serde")]
+impl Into<String> for SerdeLanguageTag {
+    fn into(self) -> String {
+        self.lang_tag.into()
+    }
+}
+
+#[cfg(feature = "serde")]
+impl From<String> for SerdeLanguageTag {
+    fn from(s: String) -> Self {
+        match LanguageTag::parse(s) {
+            Ok(lang_tag) => {
+                lang_tag.into()
+            }
+            Err(_) => {
+                SerdeLanguageTag::default()
+            }
+        }
+    }
+}
+
 /// An error raised during [`LanguageTag`](struct.LanguageTag.html) validation.
 #[derive(Debug)]
 pub struct LanguageTagParseError {
