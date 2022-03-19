@@ -493,6 +493,18 @@ impl TryFrom<String> for LanguageTag<String> {
 /// Language Tag Type that is infallable when used with `serde`'s [decorators](https://serde.rs/container-attrs.html#from). This is accomplished
 /// by having a default trait that auto-resolves to `en-US`. You must have crate feature `serde` enabled to use this.
 ///
+/// Example:
+/// ```
+/// use oxilangtag::SerdeLanguageTag;
+/// use serde::{Serialize, Deserialize};
+///
+/// pub struct ContainerStruct {
+///     #[serde(into = "String", from = "String")]
+///     language: SerdeLanguageTag
+/// }
+/// ```
+///
+/// use oxilangtag::LanguageTag;
 /// See [`LanguageTag`] for details.
 #[derive(Clone, Debug)]
 pub struct SerdeLanguageTag {
