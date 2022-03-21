@@ -10,9 +10,10 @@
     unused_qualifications
 )]
 
+#[cfg(feature = "serialize")]
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::borrow::{Borrow, Cow};
 use std::cmp::Ordering;
-use std::convert::TryFrom;
 use std::error::Error;
 use std::fmt;
 use std::fmt::{Display, Formatter};
@@ -20,10 +21,6 @@ use std::hash::{Hash, Hasher};
 use std::iter::once;
 use std::ops::Deref;
 use std::str::{FromStr, Split};
-#[cfg(feature = "serde")]
-use std::ops::DerefMut;
-#[cfg(feature = "serde")]
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 /// A [RFC 5646](https://tools.ietf.org/html/rfc5646) language tag.
 ///
@@ -33,8 +30,6 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 /// let language_tag = LanguageTag::parse("en-us").unwrap();
 /// assert_eq!(language_tag.into_inner(), "en-us")
 /// ```
-///
-/// If you want an infalliable `serde` type, please see [`SerdeLanguageTag`]
 #[derive(Copy, Clone)]
 pub struct LanguageTag<T> {
     tag: T,
@@ -471,174 +466,19 @@ impl<'a> From<LanguageTag<String>> for LanguageTag<Cow<'a, str>> {
     }
 }
 
-#[cfg(feature = "serde")]
-impl From<SerdeLanguageTag> for LanguageTag<String> {
-    fn from(slt: SerdeLanguageTag) -> Self {
-        slt.lang_tag
-    }
-}
-
-impl<T> Into<String> for LanguageTag<T> where T: Deref<Target = str> {
-    fn into(self) -> String {
-        self.as_str().to_string()
-    }
-}
-
-impl TryFrom<String> for LanguageTag<String> {
-    type Error = LanguageTagParseError;
-
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        LanguageTag::from_str(value.as_ref())
-    }
-}
-
-#[cfg(feature = "serde")]
+#[cfg(feature = "serialize")]
 impl<T: Serialize> Serialize for LanguageTag<T> {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         self.tag.serialize(serializer)
     }
 }
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "serialize")]
 impl<'de, T: Deref<Target = str> + Deserialize<'de>> Deserialize<'de> for LanguageTag<T> {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<LanguageTag<T>, D::Error> {
         use serde::de::Error;
 
         Self::parse(T::deserialize(deserializer)?).map_err(D::Error::custom)
-    }
-}
-
-// #[doc(cfg(feature = "serde"))] wait for this to be stable
-#[cfg(feature = "serde")]
-/// Language Tag Type that is infallable when used with `serde`. This is accomplished
-/// by having a default trait that auto-resolves to `und`. You must have crate feature `serde` enabled to use this.
-///
-/// If you are deserializing and it is an invalid tag, it will auto-resolve to the undefined(`und`) tag.
-///
-/// See [`LanguageTag`] for details.
-#[derive(Clone, Debug, Hash, Ord, PartialOrd, Eq, PartialEq)]
-pub struct SerdeLanguageTag {
-    lang_tag: LanguageTag<String>
-}
-
-#[cfg(feature = "serde")]
-impl Deref for SerdeLanguageTag {
-    type Target = LanguageTag<String>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.lang_tag
-    }
-}
-
-#[cfg(feature = "serde")]
-impl Default for SerdeLanguageTag {
-    fn default() -> Self {
-        match LanguageTag::parse("und") {
-            Ok(lang_tag) => {
-                SerdeLanguageTag {
-                    lang_tag: LanguageTag::from(lang_tag)
-                }
-            }
-            Err(_) => {
-                // PANICS: This can never happen as en-US is a valid language tag. If this causes UB then it is a bug,
-                unreachable!("This is a bug. en-US is supposed to be a valid LangTag! Please report this bug to https://github.com/oxigraph/oxilangtag")
-            }
-        }
-    }
-}
-
-#[cfg(feature = "serde")]
-impl DerefMut for SerdeLanguageTag {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.lang_tag
-    }
-}
-
-#[cfg(feature = "serde")]
-impl From<LanguageTag<String>> for SerdeLanguageTag {
-    fn from(lang_tag: LanguageTag<String>) -> Self {
-        SerdeLanguageTag {
-            lang_tag
-        }
-    }
-}
-
-#[cfg(feature = "serde")]
-impl Into<String> for SerdeLanguageTag {
-    fn into(self) -> String {
-        self.lang_tag.into()
-    }
-}
-
-#[cfg(feature = "serde")]
-impl From<String> for SerdeLanguageTag {
-    fn from(s: String) -> Self {
-        match LanguageTag::parse(s) {
-            Ok(lang_tag) => {
-                lang_tag.into()
-            }
-            Err(_) => {
-                SerdeLanguageTag::default()
-            }
-        }
-    }
-}
-
-#[cfg(feature = "serde")]
-impl Serialize for SerdeLanguageTag {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        self.tag.serialize(serializer)
-    }
-}
-
-#[cfg(feature = "serde")]
-impl<'de> Deserialize<'de> for SerdeLanguageTag {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> {
-        match LanguageTag::parse(String::deserialize(deserializer).unwrap_or_default()) {
-            Ok(lt) => {
-                println!("a");
-                Ok(lt.into())
-            }
-            Err(_) => {
-                println!("b");
-                Ok(SerdeLanguageTag::default())
-            }
-        }
-    }
-}
-
-#[cfg(feature = "serde")]
-impl Display for SerdeLanguageTag {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.lang_tag)
-    }
-}
-
-#[cfg(feature = "serde")]
-impl AsRef<str> for SerdeLanguageTag {
-    fn as_ref(&self) -> &str {
-        self.lang_tag.as_ref()
-    }
-}
-
-#[cfg(feature = "serde")]
-impl Borrow<str> for SerdeLanguageTag {
-    fn borrow(&self) -> &str {
-        self.lang_tag.borrow()
-    }
-}
-
-#[cfg(feature = "serde")]
-impl FromStr for SerdeLanguageTag {
-    type Err = ();
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(
-            match LanguageTag::parse(s.to_string()) {
-                Ok(lt) => lt.into(),
-                Err(_) => SerdeLanguageTag::default()
-            }
-        )
     }
 }
 

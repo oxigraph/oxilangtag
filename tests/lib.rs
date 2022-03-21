@@ -1,8 +1,6 @@
 use oxilangtag::LanguageTag;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
-#[cfg(feature = "serde")]
-use oxilangtag::SerdeLanguageTag;
 
 // Tests from RFC 5646 2.1.1
 #[test]
@@ -699,7 +697,7 @@ fn test_str() {
     assert!(tag.starts_with("en-"));
 }
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "serialize")]
 #[test]
 fn test_langtag_serialize_deserialize_valid() {
     let tag = LanguageTag::parse("en-US".to_string()).unwrap();
@@ -708,26 +706,9 @@ fn test_langtag_serialize_deserialize_valid() {
     assert_eq!(deserialize_json, tag);
 }
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "serialize")]
 #[test]
 fn test_langtag_serialize_deserialize_invalid() {
     let deserialize_json: Result<LanguageTag<String>, _> = serde_json::from_str("estrogen pogger!"); // this will fail
     assert!(deserialize_json.is_err());
-}
-
-#[cfg(feature = "serde")]
-#[test]
-fn test_serdelangtag_serialize_deserialize_valid() {
-    let tag: SerdeLanguageTag = LanguageTag::parse("en-US".to_string()).unwrap().into();
-    let serialize_json = serde_json::to_string(&tag).unwrap();
-    println!("{}", serialize_json);
-    let deserialize_json: SerdeLanguageTag = serde_json::from_str(&serialize_json).unwrap();
-    assert_eq!(deserialize_json, tag);
-}
-
-#[cfg(feature = "serde")]
-#[test]
-fn test_serdelangtag_serialize_deserialize_invalid() {
-    let deserialize_json: SerdeLanguageTag = serde_json::from_str(r#""wdawadwadawd""#).unwrap(); // this will fail
-    assert_eq!(deserialize_json, SerdeLanguageTag::default());
 }

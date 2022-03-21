@@ -1,6 +1,6 @@
 [package]
 name = "oxilangtag"
-version = "0.2.0"
+version = "0.1.3"
 authors = [
     "Tpt <thomas@pellissier-tanon.fr>"
 ]
@@ -15,7 +15,7 @@ edition = "2018"
 
 [features]
 default = []
-serde = ["serde/derive"]
+serialize = ["serde/derive"]
 
 [dependencies.serde]
 version = "1.0"
@@ -31,4 +31,4 @@ harness = false
 
 # enable serde in docs.rs
 [package.metadata.docs.rs]
-features = ["serde"]
+all-features = true

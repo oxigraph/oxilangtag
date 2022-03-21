@@ -33,8 +33,7 @@ assert_eq!(language_tag.private_use_subtags().collect::<Vec<_>>(), vec!["test"])
 ```
 
 ## Features
-- `serde`: Enables `serde` integration. NOTE: To use the serde integration properly, use 
- `[serde(into = "String")]` and `#[serde(try_from = "String")]`. If you want to be infalliable, use `SerdeLanguageTag`.
+- `serialize`: Enables `serde` integration. 
 
 ## License
 
