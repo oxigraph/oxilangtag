@@ -15,7 +15,7 @@ edition = "2018"
 
 [features]
 default = []
-serialize = ["serde/derive"]
+serialize = ["serde"]
 
 [dependencies.serde]
 version = "1.0"
