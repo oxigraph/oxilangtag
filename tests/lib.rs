@@ -696,3 +696,19 @@ fn test_str() {
     let tag = LanguageTag::parse("en-fr").unwrap();
     assert!(tag.starts_with("en-"));
 }
+
+#[cfg(feature = "serialize")]
+#[test]
+fn test_langtag_serialize_deserialize_valid() {
+    let tag = LanguageTag::parse("en-US".to_string()).unwrap();
+    let serialize_json = serde_json::to_string(&tag).unwrap();
+    let deserialize_json: LanguageTag<String> = serde_json::from_str(&serialize_json).unwrap();
+    assert_eq!(deserialize_json, tag);
+}
+
+#[cfg(feature = "serialize")]
+#[test]
+fn test_langtag_serialize_deserialize_invalid() {
+    let deserialize_json: Result<LanguageTag<String>, _> = serde_json::from_str("estrogen pogger!"); // this will fail
+    assert!(deserialize_json.is_err());
+}

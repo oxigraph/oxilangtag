@@ -32,6 +32,8 @@ assert_eq!(language_tag.extension(), None);
 assert_eq!(language_tag.private_use_subtags().collect::<Vec<_>>(), vec!["test"]);
 ```
 
+## Features
+- `serialize`: Enables `serde` integration. 
 
 ## License
 

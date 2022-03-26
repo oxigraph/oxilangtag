@@ -10,10 +10,13 @@
     unused_qualifications
 )]
 
+#[cfg(feature = "serialize")]
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::borrow::{Borrow, Cow};
 use std::cmp::Ordering;
 use std::error::Error;
 use std::fmt;
+use std::fmt::{Display, Formatter};
 use std::hash::{Hash, Hasher};
 use std::iter::once;
 use std::ops::Deref;
@@ -27,7 +30,7 @@ use std::str::{FromStr, Split};
 /// let language_tag = LanguageTag::parse("en-us").unwrap();
 /// assert_eq!(language_tag.into_inner(), "en-us")
 /// ```
-#[derive(Clone, Copy)]
+#[derive(Copy, Clone)]
 pub struct LanguageTag<T> {
     tag: T,
     positions: TagElementsPositions,
@@ -392,14 +395,14 @@ impl<T: Borrow<str>> Borrow<str> for LanguageTag<T> {
 
 impl<T: fmt::Debug> fmt::Debug for LanguageTag<T> {
     #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         self.tag.fmt(f)
     }
 }
 
-impl<T: fmt::Display> fmt::Display for LanguageTag<T> {
+impl<T: Display> Display for LanguageTag<T> {
     #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         self.tag.fmt(f)
     }
 }
@@ -463,14 +466,30 @@ impl<'a> From<LanguageTag<String>> for LanguageTag<Cow<'a, str>> {
     }
 }
 
+#[cfg(feature = "serialize")]
+impl<T: Serialize> Serialize for LanguageTag<T> {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        self.tag.serialize(serializer)
+    }
+}
+
+#[cfg(feature = "serialize")]
+impl<'de, T: Deref<Target = str> + Deserialize<'de>> Deserialize<'de> for LanguageTag<T> {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<LanguageTag<T>, D::Error> {
+        use serde::de::Error;
+
+        Self::parse(T::deserialize(deserializer)?).map_err(D::Error::custom)
+    }
+}
+
 /// An error raised during [`LanguageTag`](struct.LanguageTag.html) validation.
 #[derive(Debug)]
 pub struct LanguageTagParseError {
     kind: TagParseErrorKind,
 }
 
-impl fmt::Display for LanguageTagParseError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Display for LanguageTagParseError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self.kind {
             TagParseErrorKind::EmptyExtension => {
                 write!(f, "If an extension subtag is present, it must not be empty")
@@ -519,7 +538,7 @@ enum TagParseErrorKind {
     TooManyExtlangs,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Copy, Clone, Debug)]
 struct TagElementsPositions {
     language_end: usize,
     extlang_end: usize,
