@@ -1,14 +1,5 @@
 #![doc = include_str!("../README.md")]
-#![deny(
-    future_incompatible,
-    nonstandard_style,
-    rust_2018_idioms,
-    missing_copy_implementations,
-    trivial_casts,
-    trivial_numeric_casts,
-    unsafe_code,
-    unused_qualifications
-)]
+#![deny(unsafe_code)]
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
