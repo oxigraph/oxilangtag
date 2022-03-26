@@ -14,6 +14,8 @@ You might find the [`language-tags`](https://github.com/pyfisch/rust-language-ta
 It allows zero stack allocation language tag validation.
 Getters are also provided to easily retrieve the various language tag components.
 
+If [`serde`](https://serde.rs/) is available, `LanguageTag` implements the `Serialize` and `Deserialize` traits and encodes the language tag as a string.
+
 Example:
 ```rust
 use oxilangtag::LanguageTag;
@@ -31,9 +33,6 @@ assert_eq!(language_tag.region(), Some("CN"));
 assert_eq!(language_tag.extension(), None);
 assert_eq!(language_tag.private_use_subtags().collect::<Vec<_>>(), vec!["test"]);
 ```
-
-## Features
-- `serialize`: Enables `serde` integration. 
 
 ## License
 
