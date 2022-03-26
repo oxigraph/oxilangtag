@@ -1,4 +1,7 @@
 use oxilangtag::LanguageTag;
+use serde_test::{assert_de_tokens, assert_de_tokens_error};
+#[cfg(feature = "serde")]
+use serde_test::{assert_tokens, Token};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
@@ -697,18 +700,23 @@ fn test_str() {
     assert!(tag.starts_with("en-"));
 }
 
-#[cfg(feature = "serialize")]
+#[cfg(feature = "serde")]
 #[test]
-fn test_langtag_serialize_deserialize_valid() {
-    let tag = LanguageTag::parse("en-US".to_string()).unwrap();
-    let serialize_json = serde_json::to_string(&tag).unwrap();
-    let deserialize_json: LanguageTag<String> = serde_json::from_str(&serialize_json).unwrap();
-    assert_eq!(deserialize_json, tag);
-}
-
-#[cfg(feature = "serialize")]
-#[test]
-fn test_langtag_serialize_deserialize_invalid() {
-    let deserialize_json: Result<LanguageTag<String>, _> = serde_json::from_str("estrogen pogger!"); // this will fail
-    assert!(deserialize_json.is_err());
+fn test_serd_impl() {
+    assert_tokens(
+        &LanguageTag::parse("en-us").unwrap(),
+        &[Token::BorrowedStr("en-us")],
+    );
+    assert_tokens(
+        &LanguageTag::parse("en-US".to_string()).unwrap(),
+        &[Token::String("en-US")],
+    );
+    assert_de_tokens(
+        &LanguageTag::parse("en-US".to_string()).unwrap(),
+        &[Token::BorrowedStr("en-US")],
+    );
+    assert_de_tokens_error::<LanguageTag<String>>(
+        &[Token::String("verybadvalue")],
+        "A subtag may be eight characters in length at maximum",
+    );
 }
