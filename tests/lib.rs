@@ -1,7 +1,6 @@
 use oxilangtag::LanguageTag;
-use serde_test::{assert_de_tokens, assert_de_tokens_error};
 #[cfg(feature = "serde")]
-use serde_test::{assert_tokens, Token};
+use serde_test::{assert_de_tokens, assert_de_tokens_error, assert_tokens, Token};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
@@ -684,8 +683,8 @@ fn test_eq() {
     assert_eq!(tag, "en-fr");
     assert_ne!(tag, "en-FR");
     assert_eq!("en-fr", tag);
-    assert_eq!(hash(&tag), hash("en-fr"));
-    assert_ne!(hash(&tag), hash("en-FR"));
+    assert_eq!(hash(tag), hash("en-fr"));
+    assert_ne!(hash(tag), hash("en-FR"));
 }
 
 fn hash(value: impl Hash) -> u64 {
