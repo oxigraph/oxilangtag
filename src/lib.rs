@@ -27,7 +27,7 @@ pub struct LanguageTag<T> {
 }
 
 impl<T: Deref<Target = str>> LanguageTag<T> {
-    /// Parses a language tag acccording to [RFC 5646](https://tools.ietf.org/html/rfc5646).
+    /// Parses a language tag according to [RFC 5646](https://tools.ietf.org/html/rfc5646).
     /// and checks if the tag is ["well-formed"](https://tools.ietf.org/html/rfc5646#section-2.2.9).
     ///
     /// This operation keeps internally the `tag` parameter and does not allocate on the heap.
@@ -250,7 +250,7 @@ impl<T: Deref<Target = str>> LanguageTag<T> {
 }
 
 impl LanguageTag<String> {
-    /// Parses a language tag acccording to [RFC 5646](https://tools.ietf.org/html/rfc5646)
+    /// Parses a language tag according to [RFC 5646](https://tools.ietf.org/html/rfc5646)
     /// and normalizes its case.
     ///
     /// This parser accepts the language tags that are "well-formed" according to
