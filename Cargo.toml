@@ -22,7 +22,7 @@ serialize = ["serde"]
 serde = { version = "1", optional = true }
 
 [dev-dependencies]
-criterion = "0.4"
+criterion = "0.5"
 serde_test = "1"
 
 [[bench]]
