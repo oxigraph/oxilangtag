@@ -16,11 +16,13 @@ edition = "2018"
 rust-version = "1.58"
 
 [features]
-default = []
-serialize = ["serde"]
+default = ["std"]
+std = ["serde?/std"]
+alloc = ["serde?/alloc"]
+serialize = ["dep:serde"]
 
 [dependencies]
-serde = { version = "1", optional = true }
+serde = { version = "1", optional = true, default_features = false }
 
 [dev-dependencies]
 criterion = "0.4"
