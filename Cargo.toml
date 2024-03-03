@@ -13,7 +13,7 @@ description = """
 Simple and fast implementation of language tag normalization and validation
 """
 edition = "2018"
-rust-version = "1.58"
+rust-version = "1.63"
 
 [features]
 default = ["std"]
@@ -22,10 +22,10 @@ alloc = ["serde?/alloc"]
 serialize = ["dep:serde"]
 
 [dependencies]
-serde = { version = "1", optional = true, default_features = false }
+serde = { version = "1.0.100", optional = true, default_features = false }
 
 [dev-dependencies]
-criterion = "0.4"
+criterion = ">=0.4,<0.6"
 serde_test = "1"
 
 [[bench]]
