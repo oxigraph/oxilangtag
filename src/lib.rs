@@ -1,17 +1,24 @@
 #![doc = include_str!("../README.md")]
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 #![deny(unsafe_code)]
+#![no_std]
 
+#[cfg(feature = "std")]
+extern crate std;
+
+extern crate alloc;
+
+use alloc::borrow::{Borrow, Cow};
+use alloc::boxed::Box;
+use alloc::fmt;
+use alloc::str::{FromStr, Split};
+use alloc::string::String;
+use core::cmp::Ordering;
+use core::hash::{Hash, Hasher};
+use core::iter::once;
+use core::ops::Deref;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use std::borrow::{Borrow, Cow};
-use std::cmp::Ordering;
-use std::error::Error;
-use std::fmt;
-use std::hash::{Hash, Hasher};
-use std::iter::once;
-use std::ops::Deref;
-use std::str::{FromStr, Split};
 
 /// A [RFC 5646](https://tools.ietf.org/html/rfc5646) language tag.
 ///
@@ -507,7 +514,10 @@ impl fmt::Display for LanguageTagParseError {
     }
 }
 
-impl Error for LanguageTagParseError {}
+// Move to core::error::Error once stable see
+// https://github.com/rust-lang/rust/issues/103765
+#[cfg(feature = "std")]
+impl std::error::Error for LanguageTagParseError {}
 
 #[derive(Debug)]
 enum TagParseErrorKind {
