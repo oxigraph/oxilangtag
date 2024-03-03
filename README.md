@@ -34,6 +34,11 @@ assert_eq!(language_tag.extension(), None);
 assert_eq!(language_tag.private_use_subtags().collect::<Vec<_>>(), vec!["test"]);
 ```
 
+It is also possible to use this crate in `no_std` (with `alloc`) by opting-out of the default `std` feature:
+```toml
+serde = { version = "*", default-features = false }
+```
+
 ## License
 
 This project is licensed under the MIT license ([LICENSE-MIT](LICENSE-MIT) or `<http://opensource.org/licenses/MIT>`).
