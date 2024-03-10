@@ -1,6 +1,6 @@
 [package]
 name = "oxilangtag"
-version = "0.1.4"
+version = "0.1.5"
 authors = [
     "Tpt <thomas@pellissier-tanon.fr>"
 ]
@@ -19,7 +19,7 @@ rust-version = "1.63"
 default = ["std"]
 std = ["serde?/std"]
 alloc = ["serde?/alloc"]
-serialize = ["dep:serde"]
+serialize = ["serde"]
 
 [dependencies]
 serde = { version = "1.0.100", optional = true, default_features = false }
