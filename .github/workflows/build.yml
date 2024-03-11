@@ -12,14 +12,14 @@ jobs:
   fmt:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - run: rustup update && rustup component add rustfmt
       - run: cargo fmt -- --check
 
   clippy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - run: rustup update && rustup component add clippy
       - uses: Swatinem/rust-cache@v2
       - run: cargo clippy --all-targets -- -D warnings -D clippy::all
@@ -29,7 +29,7 @@ jobs:
   clippy_msrv:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - run: rustup update && rustup override set 1.63.0 && rustup component add clippy && rustup toolchain install nightly
       - uses: Swatinem/rust-cache@v2
       - run: cargo +nightly update -Z direct-minimal-versions
@@ -40,7 +40,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - run: rustup update
       - uses: Swatinem/rust-cache@v2
       - run: cargo build --all-features
@@ -51,7 +51,7 @@ jobs:
   rustdoc:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - run: rustup update
       - uses: Swatinem/rust-cache@v2
       - run: cargo doc --all-features --no-deps
@@ -61,7 +61,7 @@ jobs:
   deny:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - run: rustup update
       - uses: Swatinem/rust-cache@v2
       - run: cargo install cargo-deny || true
@@ -70,7 +70,7 @@ jobs:
   semver_checks:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           submodules: true
       - run: rustup update
@@ -81,7 +81,7 @@ jobs:
   typos:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: Swatinem/rust-cache@v2
       - run: cargo install typos-cli || true
       - run: typos
