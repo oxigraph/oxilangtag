@@ -1,4 +1,4 @@
-use criterion::{criterion_group, criterion_main, Criterion};
+use codspeed_criterion_compat::{criterion_group, criterion_main, Criterion};
 use oxilangtag::LanguageTag;
 
 fn bench_language_tag_parse(c: &mut Criterion) {
