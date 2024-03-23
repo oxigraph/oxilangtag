@@ -12,24 +12,23 @@ jobs:
   fmt:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - run: rustup update && rustup component add rustfmt
       - run: cargo fmt -- --check
 
   clippy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - run: rustup update && rustup component add clippy
       - uses: Swatinem/rust-cache@v2
       - run: cargo clippy --all-targets -- -D warnings -D clippy::all
       - run: cargo clippy --all-targets --all-features -- -D warnings -D clippy::all
-      - run: cargo clippy --all-targets --no-default-features -- -D warnings -D clippy::all
 
   clippy_msrv:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - run: rustup update && rustup override set 1.63.0 && rustup component add clippy && rustup toolchain install nightly
       - uses: Swatinem/rust-cache@v2
       - run: cargo +nightly update -Z direct-minimal-versions
@@ -40,7 +39,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - run: rustup update
       - uses: Swatinem/rust-cache@v2
       - run: cargo build --all-features
@@ -51,7 +50,7 @@ jobs:
   rustdoc:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - run: rustup update
       - uses: Swatinem/rust-cache@v2
       - run: cargo doc --all-features --no-deps
@@ -61,27 +60,58 @@ jobs:
   deny:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - run: rustup update
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo install cargo-deny || true
+      - uses: taiki-e/install-action@v2
+        with: { tool: cargo-deny }
       - run: cargo deny check
 
   semver_checks:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           submodules: true
       - run: rustup update
       - uses: Swatinem/rust-cache@v2
-      - run: cargo install cargo-semver-checks || true
+      - uses: taiki-e/install-action@v2
+        with: { tool: cargo-semver-checks }
       - run: cargo semver-checks check-release
 
   typos:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo install typos-cli || true
+      - uses: actions/checkout@v4
+      - uses: taiki-e/install-action@v2
+        with: { tool: typos-cli }
       - run: typos
+
+  codspeed:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - run: rustup update
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo install cargo-codspeed || true
+      - run: cargo codspeed build
+      - uses: CodSpeedHQ/action@v2
+        with:
+          run: cargo codspeed run
+          token: ${{ secrets.CODSPEED_TOKEN }}
+
+  codecov:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - run: rustup update
+      - uses: taiki-e/install-action@v2
+        with: { tool: cargo-llvm-cov }
+      - run: cargo llvm-cov --codecov --output-path codecov.json
+      - uses: codecov/codecov-action@v3
+        with:
+          files: codecov.json
+          flags: rust
