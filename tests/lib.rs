@@ -583,7 +583,7 @@ fn test_random_bad_tags() {
         "S-Z-E_J",
         "f6wsq-02_i-F",
         "9_GcUPq_G",
-        "QjsIy_9-0-7_Dv2yPV09_D-JXWXM",
+        "QjsAa_9-0-7_Dv2yPV09_D-JXWXM",
         "D_se-f-k",
         "ON47Wv1_2_W",
         "f-z-R_s-ha",
