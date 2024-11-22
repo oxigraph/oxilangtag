@@ -454,7 +454,7 @@ impl<'a> From<LanguageTag<&'a str>> for LanguageTag<Cow<'a, str>> {
     }
 }
 
-impl<'a> From<LanguageTag<String>> for LanguageTag<Cow<'a, str>> {
+impl From<LanguageTag<String>> for LanguageTag<Cow<'_, str>> {
     #[inline]
     fn from(tag: LanguageTag<String>) -> Self {
         Self {

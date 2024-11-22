@@ -22,7 +22,7 @@ alloc = ["serde?/alloc"]
 serialize = ["serde"]
 
 [dependencies]
-serde = { version = "1.0.166", optional = true, default_features = false }
+serde = { version = "1.0.166", optional = true, default-features = false }
 
 [dev-dependencies]
 codspeed-criterion-compat = "2.3.3"

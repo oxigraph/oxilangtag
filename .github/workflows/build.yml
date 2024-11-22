@@ -110,7 +110,9 @@ jobs:
         id: cache-corpus
         with:
           path: fuzz/corpus/${{ matrix.target }}
-          key: fuzz-${{ matrix.target }}
+          key: fuzz-${{ matrix.target }}-${{ github.run_id }}
+          restore-keys: |
+            fuzz-${{ matrix.target }}
       - uses: Swatinem/rust-cache@v2
       - run: cargo install cargo-fuzz || true
       - run: python3 build_corpus.py
