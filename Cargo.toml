@@ -25,7 +25,7 @@ serialize = ["serde"]
 serde = { version = "1.0.166", optional = true, default-features = false }
 
 [dev-dependencies]
-codspeed-criterion-compat = "2.3.3"
+codspeed-criterion-compat = "3.0.2"
 serde_test = "1"
 
 [[bench]]
