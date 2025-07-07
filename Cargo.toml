@@ -22,10 +22,10 @@ alloc = ["serde?/alloc"]
 serialize = ["serde"]
 
 [dependencies]
-serde = { version = "1.0.217", optional = true, default-features = false }
+serde = { version = "1.0.166", optional = true, default-features = false }
 
 [dev-dependencies]
-codspeed-criterion-compat = "3"
+codspeed-criterion-compat = ">=2.3.3,<4.0"
 serde_test = "1"
 
 [[bench]]
