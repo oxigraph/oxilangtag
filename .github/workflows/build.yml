@@ -82,6 +82,9 @@ jobs:
 
   codspeed:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v6
         with:
@@ -93,8 +96,7 @@ jobs:
       - uses: CodSpeedHQ/action@v4
         with:
           run: cargo codspeed run
-          token: ${{ secrets.CODSPEED_TOKEN }}
-          mode: instrumentation
+          mode: simulation
 
   fuzz:
     strategy:
@@ -125,6 +127,9 @@ jobs:
 
   codecov:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v6
       - uses: Swatinem/rust-cache@v2
@@ -136,4 +141,4 @@ jobs:
           files: codecov.json
           flags: rust
           fail_ci_if_error: true
-          token: ${{ secrets.CODECOV_TOKEN }}
+          use_oidc: true
