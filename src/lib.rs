@@ -103,11 +103,16 @@ impl<T: Deref<Target = str>> LanguageTag<T> {
     /// use oxilangtag::LanguageTag;
     ///
     /// let language_tag = LanguageTag::parse("zh-cmn-Hans-CN").unwrap();
-    /// assert_eq!(language_tag.extended_language_subtags().collect::<Vec<_>>(), vec!["cmn"]);
+    /// assert_eq!(
+    ///     language_tag.extended_language_subtags().collect::<Vec<_>>(),
+    ///     vec!["cmn"]
+    /// );
     /// ```
     #[inline]
     pub fn extended_language_subtags(&self) -> impl Iterator<Item = &str> {
-        self.extended_language().unwrap_or("").split_terminator('-')
+        self.extended_language()
+            .unwrap_or_default()
+            .split_terminator('-')
     }
 
     /// Returns the [primary language subtag](https://tools.ietf.org/html/rfc5646#section-2.2.1)
@@ -181,11 +186,14 @@ impl<T: Deref<Target = str>> LanguageTag<T> {
     /// use oxilangtag::LanguageTag;
     ///
     /// let language_tag = LanguageTag::parse("zh-Latn-TW-pinyin").unwrap();
-    /// assert_eq!(language_tag.variant_subtags().collect::<Vec<_>>(), vec!["pinyin"]);
+    /// assert_eq!(
+    ///     language_tag.variant_subtags().collect::<Vec<_>>(),
+    ///     vec!["pinyin"]
+    /// );
     /// ```
     #[inline]
     pub fn variant_subtags(&self) -> impl Iterator<Item = &str> {
-        self.variant().unwrap_or("").split_terminator('-')
+        self.variant().unwrap_or_default().split_terminator('-')
     }
 
     /// Returns the [extension subtags](https://tools.ietf.org/html/rfc5646#section-2.2.6).
@@ -211,14 +219,14 @@ impl<T: Deref<Target = str>> LanguageTag<T> {
     /// use oxilangtag::LanguageTag;
     ///
     /// let language_tag = LanguageTag::parse("de-DE-u-co-phonebk").unwrap();
-    /// assert_eq!(language_tag.extension_subtags().collect::<Vec<_>>(), vec![('u', "co-phonebk")]);
+    /// assert_eq!(
+    ///     language_tag.extension_subtags().collect::<Vec<_>>(),
+    ///     vec![('u', "co-phonebk")]
+    /// );
     /// ```
     #[inline]
     pub fn extension_subtags(&self) -> impl Iterator<Item = (char, &str)> {
-        match self.extension() {
-            Some(parts) => ExtensionsIterator::new(parts),
-            None => ExtensionsIterator::new(""),
-        }
+        ExtensionsIterator::new(self.extension().unwrap_or_default())
     }
 
     /// Returns the [private use subtags](https://tools.ietf.org/html/rfc5646#section-2.2.7).
@@ -246,13 +254,16 @@ impl<T: Deref<Target = str>> LanguageTag<T> {
     /// use oxilangtag::LanguageTag;
     ///
     /// let language_tag = LanguageTag::parse("de-x-foo-bar").unwrap();
-    /// assert_eq!(language_tag.private_use_subtags().collect::<Vec<_>>(), vec!["foo", "bar"]);
+    /// assert_eq!(
+    ///     language_tag.private_use_subtags().collect::<Vec<_>>(),
+    ///     vec!["foo", "bar"]
+    /// );
     /// ```
     #[inline]
     pub fn private_use_subtags(&self) -> impl Iterator<Item = &str> {
         self.private_use()
             .map(|part| &part[2..])
-            .unwrap_or("")
+            .unwrap_or_default()
             .split_terminator('-')
     }
 }
@@ -495,9 +506,6 @@ impl fmt::Display for LanguageTagParseError {
             TagParseErrorKind::EmptyPrivateUse => {
                 write!(f, "If the `x` subtag is present, it must not be empty")
             }
-            TagParseErrorKind::ForbiddenChar => {
-                write!(f, "The langtag contains a char not allowed")
-            }
             TagParseErrorKind::InvalidSubtag => write!(
                 f,
                 "A subtag fails to parse, it does not match any other subtags"
@@ -525,8 +533,6 @@ enum TagParseErrorKind {
     EmptyExtension,
     /// If the `x` subtag is present, it must not be empty.
     EmptyPrivateUse,
-    /// The langtag contains a char that is not A-Z, a-z, 0-9 or the dash.
-    ForbiddenChar,
     /// A subtag fails to parse, it does not match any other subtags.
     InvalidSubtag,
     /// The given language subtag is invalid.
@@ -588,44 +594,28 @@ fn parse_language_tag(
     input: &str,
     output: &mut impl OutputBuffer,
 ) -> Result<TagElementsPositions, LanguageTagParseError> {
-    //grandfathered tags
-    if let Some(tag) = GRANDFATHEREDS
-        .iter()
-        .find(|record| record.eq_ignore_ascii_case(input))
-    {
-        output.push_str(tag);
-        Ok(TagElementsPositions {
-            language_end: tag.len(),
-            extlang_end: tag.len(),
-            script_end: tag.len(),
-            region_end: tag.len(),
-            variant_end: tag.len(),
-            extension_end: tag.len(),
-        })
-    } else if input.starts_with("x-") || input.starts_with("X-") {
-        // private use
-        if !is_alphanumeric_or_dash(input) {
-            Err(LanguageTagParseError {
-                kind: TagParseErrorKind::ForbiddenChar,
-            })
-        } else if input.len() == 2 {
-            Err(LanguageTagParseError {
-                kind: TagParseErrorKind::EmptyPrivateUse,
-            })
-        } else {
-            output.extend(input.chars().map(|c| c.to_ascii_lowercase()));
-            Ok(TagElementsPositions {
-                language_end: input.len(),
-                extlang_end: input.len(),
-                script_end: input.len(),
-                region_end: input.len(),
-                variant_end: input.len(),
-                extension_end: input.len(),
-            })
+    // grandfathered tags
+    if input.len() >= 5 {
+        if let Some(tag) = GRANDFATHEREDS
+            .iter()
+            .find(|record| record.eq_ignore_ascii_case(input))
+        {
+            output.push_str(tag);
+            return Ok(TagElementsPositions {
+                language_end: tag.len(),
+                extlang_end: tag.len(),
+                script_end: tag.len(),
+                region_end: tag.len(),
+                variant_end: tag.len(),
+                extension_end: tag.len(),
+            });
         }
-    } else {
-        parse_langtag(input, output)
     }
+    if input.starts_with("x-") || input.starts_with("X-") {
+        // private use
+        return parse_privateuse(input, output);
+    }
+    parse_langtag(input, output)
 }
 
 /// Handles normal tags.
@@ -653,123 +643,132 @@ fn parse_langtag(
     let mut extension_end = 0;
     let mut extlangs_count = 0;
     for (subtag, end) in SubTagIterator::new(input) {
-        if subtag.is_empty() {
-            return Err(LanguageTagParseError {
-                kind: TagParseErrorKind::EmptySubtag,
-            });
-        }
-        if subtag.len() > 8 {
-            return Err(LanguageTagParseError {
-                kind: TagParseErrorKind::SubtagTooLong,
-            });
-        }
-        if state == State::Start {
-            // Primary language
-            if subtag.len() < 2 || !is_alphabetic(subtag) {
+        state = match state {
+            _ if subtag.is_empty() => {
                 return Err(LanguageTagParseError {
-                    kind: TagParseErrorKind::InvalidLanguage,
+                    kind: TagParseErrorKind::EmptySubtag,
                 });
             }
-            language_end = end;
-            output.extend(to_lowercase(subtag));
-            if subtag.len() < 4 {
-                // extlangs are only allowed for short language tags
-                state = State::AfterLanguage;
-            } else {
-                state = State::AfterExtLang;
+            _ if subtag.len() > 8 => {
+                return Err(LanguageTagParseError {
+                    kind: TagParseErrorKind::SubtagTooLong,
+                });
             }
-        } else if let State::InPrivateUse { .. } = state {
-            if !is_alphanumeric(subtag) {
+            State::Start => {
+                // Primary language
+                if subtag.len() < 2 || !is_alphabetic(subtag) {
+                    return Err(LanguageTagParseError {
+                        kind: TagParseErrorKind::InvalidLanguage,
+                    });
+                }
+                language_end = end;
+                output.extend(to_lowercase(subtag));
+                if subtag.len() < 4 {
+                    // extlangs are only allowed for short language tags
+                    State::AfterLanguage
+                } else {
+                    State::AfterExtLang
+                }
+            }
+            State::InPrivateUse { .. } => {
+                if !is_alphanumeric(subtag) {
+                    return Err(LanguageTagParseError {
+                        kind: TagParseErrorKind::InvalidSubtag,
+                    });
+                }
+                output.push('-');
+                output.extend(to_lowercase(subtag));
+                State::InPrivateUse { expected: false }
+            }
+            _ if matches!(subtag, "x" | "X") => {
+                // We make sure extension is found
+                if let State::InExtension { expected: true } = state {
+                    return Err(LanguageTagParseError {
+                        kind: TagParseErrorKind::EmptyExtension,
+                    });
+                }
+                output.push('-');
+                output.push('x');
+                State::InPrivateUse { expected: true }
+            }
+            _ if subtag.len() == 1 && is_alphanumeric(subtag) => {
+                // We make sure extension is found
+                if let State::InExtension { expected: true } = state {
+                    return Err(LanguageTagParseError {
+                        kind: TagParseErrorKind::EmptyExtension,
+                    });
+                }
+                let extension_tag = subtag.chars().next().unwrap().to_ascii_lowercase();
+                output.push('-');
+                output.push(extension_tag);
+                State::InExtension { expected: true }
+            }
+            State::InExtension { .. } => {
+                if !is_alphanumeric(subtag) {
+                    return Err(LanguageTagParseError {
+                        kind: TagParseErrorKind::InvalidSubtag,
+                    });
+                }
+                extension_end = end;
+                output.push('-');
+                output.extend(to_lowercase(subtag));
+                State::InExtension { expected: false }
+            }
+            State::AfterLanguage if subtag.len() == 3 && is_alphabetic(subtag) => {
+                extlangs_count += 1;
+                if extlangs_count > 3 {
+                    return Err(LanguageTagParseError {
+                        kind: TagParseErrorKind::TooManyExtlangs,
+                    });
+                }
+                // valid extlangs
+                extlang_end = end;
+                output.push('-');
+                output.extend(to_lowercase(subtag));
+                State::AfterLanguage
+            }
+            State::AfterLanguage | State::AfterExtLang
+                if subtag.len() == 4 && is_alphabetic(subtag) =>
+            {
+                // Script
+                script_end = end;
+                output.push('-');
+                output.extend(to_uppercase_first(subtag));
+                State::AfterScript
+            }
+            State::AfterLanguage | State::AfterExtLang | State::AfterScript
+                if subtag.len() == 2 && is_alphabetic(subtag)
+                    || subtag.len() == 3 && is_numeric(subtag) =>
+            {
+                // Region
+                region_end = end;
+                output.push('-');
+                output.extend(to_uppercase(subtag));
+                State::AfterRegion
+            }
+            State::AfterLanguage
+            | State::AfterExtLang
+            | State::AfterScript
+            | State::AfterRegion
+                if is_alphanumeric(subtag)
+                    && (subtag.len() >= 5 && subtag.as_bytes()[0].is_ascii_alphabetic()
+                        || subtag.len() >= 4 && subtag.as_bytes()[0].is_ascii_digit()) =>
+            {
+                // Variant
+                variant_end = end;
+                output.push('-');
+                output.extend(to_lowercase(subtag));
+                State::AfterRegion
+            }
+            _ => {
                 return Err(LanguageTagParseError {
                     kind: TagParseErrorKind::InvalidSubtag,
                 });
             }
-            output.push('-');
-            output.extend(to_lowercase(subtag));
-            state = State::InPrivateUse { expected: false };
-        } else if subtag == "x" || subtag == "X" {
-            // We make sure extension is found
-            if let State::InExtension { expected: true } = state {
-                return Err(LanguageTagParseError {
-                    kind: TagParseErrorKind::EmptyExtension,
-                });
-            }
-            output.push('-');
-            output.push('x');
-            state = State::InPrivateUse { expected: true };
-        } else if subtag.len() == 1 && is_alphanumeric(subtag) {
-            // We make sure extension is found
-            if let State::InExtension { expected: true } = state {
-                return Err(LanguageTagParseError {
-                    kind: TagParseErrorKind::EmptyExtension,
-                });
-            }
-            let extension_tag = subtag.chars().next().unwrap().to_ascii_lowercase();
-            output.push('-');
-            output.push(extension_tag);
-            state = State::InExtension { expected: true };
-        } else if let State::InExtension { .. } = state {
-            if !is_alphanumeric(subtag) {
-                return Err(LanguageTagParseError {
-                    kind: TagParseErrorKind::InvalidSubtag,
-                });
-            }
-            extension_end = end;
-            output.push('-');
-            output.extend(to_lowercase(subtag));
-            state = State::InExtension { expected: false };
-        } else if state == State::AfterLanguage && subtag.len() == 3 && is_alphabetic(subtag) {
-            extlangs_count += 1;
-            if extlangs_count > 3 {
-                return Err(LanguageTagParseError {
-                    kind: TagParseErrorKind::TooManyExtlangs,
-                });
-            }
-            // valid extlangs
-            extlang_end = end;
-            output.push('-');
-            output.extend(to_lowercase(subtag));
-        } else if (state == State::AfterLanguage || state == State::AfterExtLang)
-            && subtag.len() == 4
-            && is_alphabetic(subtag)
-        {
-            // Script
-            script_end = end;
-            output.push('-');
-            output.extend(to_uppercase_first(subtag));
-            state = State::AfterScript;
-        } else if (state == State::AfterLanguage
-            || state == State::AfterExtLang
-            || state == State::AfterScript)
-            && (subtag.len() == 2 && is_alphabetic(subtag)
-                || subtag.len() == 3 && is_numeric(subtag))
-        {
-            // Region
-            region_end = end;
-            output.push('-');
-            output.extend(to_uppercase(subtag));
-            state = State::AfterRegion;
-        } else if (state == State::AfterLanguage
-            || state == State::AfterExtLang
-            || state == State::AfterScript
-            || state == State::AfterRegion)
-            && is_alphanumeric(subtag)
-            && (subtag.len() >= 5 && is_alphabetic(&subtag[0..1])
-                || subtag.len() >= 4 && is_numeric(&subtag[0..1]))
-        {
-            // Variant
-            variant_end = end;
-            output.push('-');
-            output.extend(to_lowercase(subtag));
-            state = State::AfterRegion;
-        } else {
-            return Err(LanguageTagParseError {
-                kind: TagParseErrorKind::InvalidSubtag,
-            });
-        }
+        };
     }
 
-    //We make sure we are in a correct final state
+    // We make sure we are in a correct final state
     if let State::InExtension { expected: true } = state {
         return Err(LanguageTagParseError {
             kind: TagParseErrorKind::EmptyExtension,
@@ -781,7 +780,7 @@ fn parse_langtag(
         });
     }
 
-    //We make sure we have not skipped anyone
+    // We make sure we have not skipped anyone
     if extlang_end < language_end {
         extlang_end = language_end;
     }
@@ -805,6 +804,45 @@ fn parse_langtag(
         region_end,
         variant_end,
         extension_end,
+    })
+}
+
+fn parse_privateuse(
+    input: &str,
+    output: &mut impl OutputBuffer,
+) -> Result<TagElementsPositions, LanguageTagParseError> {
+    let striped_input = &input[2..];
+    if striped_input.is_empty() {
+        return Err(LanguageTagParseError {
+            kind: TagParseErrorKind::EmptyPrivateUse,
+        });
+    }
+    for subtag in striped_input.split('-') {
+        if subtag.is_empty() {
+            return Err(LanguageTagParseError {
+                kind: TagParseErrorKind::EmptySubtag,
+            });
+        }
+        if subtag.len() > 8 {
+            return Err(LanguageTagParseError {
+                kind: TagParseErrorKind::SubtagTooLong,
+            });
+        }
+        if !is_alphanumeric(subtag) {
+            return Err(LanguageTagParseError {
+                kind: TagParseErrorKind::InvalidSubtag,
+            });
+        }
+    }
+
+    output.extend(to_lowercase(input));
+    Ok(TagElementsPositions {
+        language_end: input.len(),
+        extlang_end: input.len(),
+        script_end: input.len(),
+        region_end: input.len(),
+        variant_end: input.len(),
+        extension_end: input.len(),
     })
 }
 
@@ -869,22 +907,17 @@ impl<'a> Iterator for SubTagIterator<'a> {
 
 #[inline]
 fn is_alphabetic(s: &str) -> bool {
-    s.chars().all(|x| x.is_ascii_alphabetic())
+    s.bytes().all(|x| x.is_ascii_alphabetic())
 }
 
 #[inline]
 fn is_numeric(s: &str) -> bool {
-    s.chars().all(|x| x.is_ascii_digit())
+    s.bytes().all(|x| x.is_ascii_digit())
 }
 
 #[inline]
 fn is_alphanumeric(s: &str) -> bool {
-    s.chars().all(|x| x.is_ascii_alphanumeric())
-}
-
-#[inline]
-fn is_alphanumeric_or_dash(s: &str) -> bool {
-    s.chars().all(|x| x.is_ascii_alphanumeric() || x == '-')
+    s.bytes().all(|x| x.is_ascii_alphanumeric())
 }
 
 #[inline]
