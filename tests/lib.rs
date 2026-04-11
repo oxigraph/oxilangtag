@@ -665,6 +665,10 @@ fn test_random_bad_tags() {
         "p-Os0dua-H_o-u",
         "L",
         "rby-w",
+        "x-",
+        "x-foo-",
+        "x--foo",
+        "x-abcdefghijkl",
     ];
     for tag in tags {
         let result = LanguageTag::parse(tag);
