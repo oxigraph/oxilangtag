@@ -1,6 +1,6 @@
 [package]
 name = "oxilangtag"
-version = "0.1.5"
+version = "0.1.6"
 authors = [
     "Tpt <thomas@pellissier-tanon.fr>"
 ]

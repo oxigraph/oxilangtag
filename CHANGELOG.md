@@ -1,10 +1,19 @@
 # Changelog
 
+## [0.1.6] - 2026-05-23
+
+### Changed
+
+- Fixes parsing of private use tag (the full tag is considered as "private used" and not as "language").
+- Validate properly private use tags (`x--` is not considered valid anymore).
+
+
 ## [0.1.5] - 2024-03-10
 
 ### Changed
 
 - Moves back Serde feature from `dep:serde` to `serde`.
+
 
 ## [0.1.4] - 2024-03-04
 
@@ -16,12 +25,14 @@
 
 - Rust minimum supported version is set to 1.63.
 
+
 ## [0.1.3] - 2022-03-26
 
 ### Added
 
 - `LanguageTag` now implements Serde `Serialize` and `Deserialize` trait if the `serde` crate is present.
   The serialization is a plain string.
+
 
 ## [0.1.2] - 2021-04-16
 
