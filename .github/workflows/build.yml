@@ -115,7 +115,7 @@ jobs:
       - uses: taiki-e/install-action@50b4a718b59c718df4ef27a3b445f86cd57b9f00 # v2.80.0
         with: { tool: cargo-codspeed }
       - run: cargo codspeed build
-      - uses: CodSpeedHQ/action@3194d9a39c4d46684cb44bf7207fc56626aad8fd # v4
+      - uses: CodSpeedHQ/action@9d332c4d90b43981c3e55ae8e38e68709996240f # v4.17.0
         with:
           run: cargo codspeed run
           mode: simulation
