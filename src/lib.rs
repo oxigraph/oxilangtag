@@ -595,21 +595,16 @@ fn parse_language_tag(
     output: &mut impl OutputBuffer,
 ) -> Result<TagElementsPositions, LanguageTagParseError> {
     // grandfathered tags
-    if input.len() >= 5 {
-        if let Some(tag) = GRANDFATHEREDS
-            .iter()
-            .find(|record| record.eq_ignore_ascii_case(input))
-        {
-            output.push_str(tag);
-            return Ok(TagElementsPositions {
-                language_end: tag.len(),
-                extlang_end: tag.len(),
-                script_end: tag.len(),
-                region_end: tag.len(),
-                variant_end: tag.len(),
-                extension_end: tag.len(),
-            });
-        }
+    if let Some(tag) = is_grandfathered(input) {
+        output.push_str(tag);
+        return Ok(TagElementsPositions {
+            language_end: tag.len(),
+            extlang_end: tag.len(),
+            script_end: tag.len(),
+            region_end: tag.len(),
+            variant_end: tag.len(),
+            extension_end: tag.len(),
+        });
     }
     if input.starts_with("x-") || input.starts_with("X-") {
         // private use
@@ -937,31 +932,85 @@ fn to_lowercase(s: &str) -> impl Iterator<Item = char> + '_ {
     s.chars().map(|c| c.to_ascii_lowercase())
 }
 
-const GRANDFATHEREDS: [&str; 26] = [
-    "art-lojban",
-    "cel-gaulish",
-    "en-GB-oed",
-    "i-ami",
-    "i-bnn",
-    "i-default",
-    "i-enochian",
-    "i-hak",
-    "i-klingon",
-    "i-lux",
-    "i-mingo",
-    "i-navajo",
-    "i-pwn",
-    "i-tao",
-    "i-tay",
-    "i-tsu",
-    "no-bok",
-    "no-nyn",
-    "sgn-BE-FR",
-    "sgn-BE-NL",
-    "sgn-CH-DE",
-    "zh-guoyu",
-    "zh-hakka",
-    "zh-min",
-    "zh-min-nan",
-    "zh-xiang",
-];
+#[inline]
+fn is_grandfathered(tag: &str) -> Option<&'static str> {
+    let tag = tag.as_bytes();
+    if tag.len() < 5 {
+        return None;
+    }
+    match tag[0].to_ascii_lowercase() {
+        b'a' if tag.eq_ignore_ascii_case(b"art-lojban") => Some("art-lojban"),
+        b'c' if tag.eq_ignore_ascii_case(b"cel-gaulish") => Some("cel-gaulish"),
+        b'e' if tag.eq_ignore_ascii_case(b"en-gb-oed") => Some("en-GB-oed"),
+        b'i' if tag[1] == b'-' => {
+            if tag[2..].eq_ignore_ascii_case(b"ami") {
+                Some("i-ami")
+            } else if tag[2..].eq_ignore_ascii_case(b"bnn") {
+                Some("i-bnn")
+            } else if tag[2..].eq_ignore_ascii_case(b"default") {
+                Some("i-default")
+            } else if tag[2..].eq_ignore_ascii_case(b"enochian") {
+                Some("i-enochian")
+            } else if tag[2..].eq_ignore_ascii_case(b"hak") {
+                Some("i-hak")
+            } else if tag[2..].eq_ignore_ascii_case(b"klingon") {
+                Some("i-klingon")
+            } else if tag[2..].eq_ignore_ascii_case(b"lux") {
+                Some("i-lux")
+            } else if tag[2..].eq_ignore_ascii_case(b"mingo") {
+                Some("i-mingo")
+            } else if tag[2..].eq_ignore_ascii_case(b"navajo") {
+                Some("i-navajo")
+            } else if tag[2..].eq_ignore_ascii_case(b"pwn") {
+                Some("i-pwn")
+            } else if tag[2..].eq_ignore_ascii_case(b"tao") {
+                Some("i-tao")
+            } else if tag[2..].eq_ignore_ascii_case(b"tay") {
+                Some("i-tay")
+            } else if tag[2..].eq_ignore_ascii_case(b"tsu") {
+                Some("i-tsu")
+            } else {
+                None
+            }
+        }
+        b'n' if tag[1].eq_ignore_ascii_case(&b'o') && tag[2] == b'-' => {
+            if tag[3..].eq_ignore_ascii_case(b"bok") {
+                Some("no-bok")
+            } else if tag[3..].eq_ignore_ascii_case(b"nyn") {
+                Some("no-nyn")
+            } else {
+                None
+            }
+        }
+        b's' if tag[1].eq_ignore_ascii_case(&b'g')
+            && tag[2].eq_ignore_ascii_case(&b'n')
+            && tag[3] == b'-' =>
+        {
+            if tag[4..].eq_ignore_ascii_case(b"be-fr") {
+                Some("sgn-BE-FR")
+            } else if tag[4..].eq_ignore_ascii_case(b"be-nl") {
+                Some("sgn-BE-NL")
+            } else if tag[4..].eq_ignore_ascii_case(b"ch-de") {
+                Some("sgn-CH-DE")
+            } else {
+                None
+            }
+        }
+        b'z' if tag[1].eq_ignore_ascii_case(&b'h') && tag[2] == b'-' => {
+            if tag[3..].eq_ignore_ascii_case(b"guoyu") {
+                Some("zh-guoyu")
+            } else if tag[3..].eq_ignore_ascii_case(b"hakka") {
+                Some("zh-hakka")
+            } else if tag[3..].eq_ignore_ascii_case(b"min") {
+                Some("zh-min")
+            } else if tag[3..].eq_ignore_ascii_case(b"min-nan") {
+                Some("zh-min-nan")
+            } else if tag[3..].eq_ignore_ascii_case(b"xiang") {
+                Some("zh-xiang")
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
+}
