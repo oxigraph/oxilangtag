@@ -272,6 +272,53 @@ fn test_privateuse() {
 }
 
 #[test]
+fn test_grandfathereds() {
+    let tags = [
+        "art-lojban",
+        "cel-gaulish",
+        "en-GB-oed",
+        "i-ami",
+        "i-bnn",
+        "i-default",
+        "i-enochian",
+        "i-hak",
+        "i-klingon",
+        "i-lux",
+        "i-mingo",
+        "i-navajo",
+        "i-pwn",
+        "i-tao",
+        "i-tay",
+        "i-tsu",
+        "no-bok",
+        "no-nyn",
+        "sgn-BE-FR",
+        "sgn-BE-NL",
+        "sgn-CH-DE",
+        "zh-guoyu",
+        "zh-hakka",
+        "zh-min",
+        "zh-min-nan",
+        "zh-xiang",
+    ];
+    for tag in tags {
+        assert_eq!(LanguageTag::parse(tag).unwrap().full_language(), tag);
+        assert_eq!(
+            LanguageTag::parse_and_normalize(&tag.to_lowercase())
+                .unwrap()
+                .full_language(),
+            tag
+        );
+        assert_eq!(
+            LanguageTag::parse_and_normalize(&tag.to_uppercase())
+                .unwrap()
+                .full_language(),
+            tag
+        );
+    }
+}
+
+#[test]
 fn test_fmt() {
     assert_eq!(
         "ar-arb-Latn-DE-nedis-foobar",
