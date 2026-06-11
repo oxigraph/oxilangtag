@@ -1,5 +1,6 @@
 use codspeed_criterion_compat::{criterion_group, criterion_main, Criterion};
 use oxilangtag::LanguageTag;
+use std::fs;
 
 fn bench_language_tag_parse(c: &mut Criterion) {
     let examples = [
@@ -72,6 +73,23 @@ fn bench_language_tag_parse(c: &mut Criterion) {
     });
 }
 
-criterion_group!(language_tag, bench_language_tag_parse);
+fn bench_cldr_language_tag_parse(c: &mut Criterion) {
+    let examples = fs::read_to_string("benches/cldr-locales.txt").unwrap();
+    let examples = examples.lines().collect::<Vec<_>>();
+
+    c.bench_function("cldr language tag parsing", |b| {
+        b.iter(|| {
+            for tag in examples.iter() {
+                LanguageTag::parse(*tag).unwrap();
+            }
+        })
+    });
+}
+
+criterion_group!(
+    language_tag,
+    bench_language_tag_parse,
+    bench_cldr_language_tag_parse
+);
 
 criterion_main!(language_tag);
