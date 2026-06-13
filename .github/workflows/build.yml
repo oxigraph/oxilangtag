@@ -161,7 +161,7 @@ jobs:
       - uses: taiki-e/install-action@50b4a718b59c718df4ef27a3b445f86cd57b9f00 # v2.80.0
         with: { tool: cargo-llvm-cov }
       - run: cargo llvm-cov --codecov --output-path codecov.json
-      - uses: codecov/codecov-action@e79a6962e0d4c0c17b229090214935d2e33f8354 # v6
+      - uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v6
         with:
           files: codecov.json
           flags: rust
