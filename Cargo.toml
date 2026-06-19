@@ -13,7 +13,7 @@ description = """
 Simple and fast implementation of language tag normalization and validation
 """
 edition = "2021"
-rust-version = "1.63"
+rust-version = "1.66"
 
 [features]
 default = ["std"]

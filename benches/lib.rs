@@ -1,6 +1,7 @@
 use codspeed_criterion_compat::{criterion_group, criterion_main, Criterion};
 use oxilangtag::LanguageTag;
 use std::fs;
+use std::hint::black_box;
 
 fn bench_language_tag_parse(c: &mut Criterion) {
     let examples = [
@@ -67,7 +68,7 @@ fn bench_language_tag_parse(c: &mut Criterion) {
     c.bench_function("language tag parse tests", |b| {
         b.iter(|| {
             for tag in examples.iter() {
-                LanguageTag::parse(*tag).unwrap();
+                LanguageTag::parse(black_box(*tag)).unwrap();
             }
         })
     });
@@ -79,8 +80,8 @@ fn bench_cldr_language_tag_parse(c: &mut Criterion) {
 
     c.bench_function("cldr language tag parsing", |b| {
         b.iter(|| {
-            for tag in examples.iter() {
-                LanguageTag::parse(*tag).unwrap();
+            for tag in &examples {
+                LanguageTag::parse(black_box(*tag)).unwrap();
             }
         })
     });
