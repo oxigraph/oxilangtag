@@ -85,6 +85,14 @@ fn bench_cldr_language_tag_parse(c: &mut Criterion) {
             }
         })
     });
+
+    c.bench_function("cldr language tag parsing and normalization", |b| {
+        b.iter(|| {
+            for tag in &examples {
+                LanguageTag::parse_and_normalize(black_box(*tag)).unwrap();
+            }
+        })
+    });
 }
 
 criterion_group!(
