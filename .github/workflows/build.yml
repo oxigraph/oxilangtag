@@ -41,7 +41,7 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           persist-credentials: false
-      - run: rustup override set 1.63.0 && rustup component add clippy && rustup toolchain install nightly
+      - run: rustup override set 1.66.0 && rustup component add clippy && rustup toolchain install nightly
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
       - run: cargo +nightly update -Z direct-minimal-versions
       - run: cargo clippy -- -D warnings -D clippy::all
