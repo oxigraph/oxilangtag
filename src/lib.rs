@@ -15,7 +15,6 @@ use alloc::str::FromStr;
 use alloc::string::String;
 use core::cmp::Ordering;
 use core::hash::{Hash, Hasher};
-use core::iter::once;
 use core::ops::Deref;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -559,6 +558,12 @@ trait OutputBuffer: Extend<char> {
     fn push(&mut self, c: char);
 
     fn push_str(&mut self, s: &str);
+
+    fn push_lowercase(&mut self, s: &str);
+
+    fn push_uppercase(&mut self, s: &str);
+
+    fn push_uppercase_first(&mut self, s: &str);
 }
 
 #[derive(Default)]
@@ -570,6 +575,15 @@ impl OutputBuffer for VoidOutputBuffer {
 
     #[inline]
     fn push_str(&mut self, _: &str) {}
+
+    #[inline]
+    fn push_lowercase(&mut self, _: &str) {}
+
+    #[inline]
+    fn push_uppercase(&mut self, _: &str) {}
+
+    #[inline]
+    fn push_uppercase_first(&mut self, _: &str) {}
 }
 
 impl Extend<char> for VoidOutputBuffer {
@@ -586,6 +600,31 @@ impl OutputBuffer for String {
     #[inline]
     fn push_str(&mut self, s: &str) {
         self.push_str(s);
+    }
+
+    #[inline]
+    fn push_lowercase(&mut self, s: &str) {
+        if s.bytes().all(|c| c.is_ascii_lowercase()) {
+            self.push_str(s);
+        } else {
+            self.extend(s.bytes().map(|c| char::from(c.to_ascii_lowercase())));
+        }
+    }
+
+    #[inline]
+    fn push_uppercase(&mut self, s: &str) {
+        if s.bytes().all(|c| c.is_ascii_uppercase()) {
+            self.push_str(s);
+        } else {
+            self.extend(s.bytes().map(|c| char::from(c.to_ascii_uppercase())));
+        }
+    }
+
+    #[inline]
+    fn push_uppercase_first(&mut self, s: &str) {
+        let (first, rest) = s.split_at(1);
+        self.push_uppercase(first);
+        self.push_lowercase(rest);
     }
 }
 
@@ -657,7 +696,7 @@ fn parse_langtag(
                     });
                 }
                 language_end = end;
-                output.extend(to_lowercase(subtag));
+                output.push_lowercase(subtag);
                 if subtag.len() < 4 {
                     // extlangs are only allowed for short language tags
                     State::AfterLanguage
@@ -672,7 +711,7 @@ fn parse_langtag(
                     });
                 }
                 output.push('-');
-                output.extend(to_lowercase(subtag));
+                output.push_lowercase(subtag);
                 State::InPrivateUse { expected: false }
             }
             _ if matches!(subtag, "x" | "X") => {
@@ -706,7 +745,7 @@ fn parse_langtag(
                 }
                 extension_end = end;
                 output.push('-');
-                output.extend(to_lowercase(subtag));
+                output.push_lowercase(subtag);
                 State::InExtension { expected: false }
             }
             State::AfterLanguage if subtag.len() == 3 && is_alphabetic(subtag) => {
@@ -719,7 +758,7 @@ fn parse_langtag(
                 // valid extlangs
                 extlang_end = end;
                 output.push('-');
-                output.extend(to_lowercase(subtag));
+                output.push_lowercase(subtag);
                 State::AfterLanguage
             }
             State::AfterLanguage | State::AfterExtLang
@@ -728,7 +767,7 @@ fn parse_langtag(
                 // Script
                 script_end = end;
                 output.push('-');
-                output.extend(to_uppercase_first(subtag));
+                output.push_uppercase_first(subtag);
                 State::AfterScript
             }
             State::AfterLanguage | State::AfterExtLang | State::AfterScript
@@ -738,7 +777,7 @@ fn parse_langtag(
                 // Region
                 region_end = end;
                 output.push('-');
-                output.extend(to_uppercase(subtag));
+                output.push_uppercase(subtag);
                 State::AfterRegion
             }
             State::AfterLanguage
@@ -752,7 +791,7 @@ fn parse_langtag(
                 // Variant
                 variant_end = end;
                 output.push('-');
-                output.extend(to_lowercase(subtag));
+                output.push_lowercase(subtag);
                 State::AfterRegion
             }
             _ => {
@@ -830,7 +869,7 @@ fn parse_privateuse(
         }
     }
 
-    output.extend(to_lowercase(input));
+    output.push_lowercase(input);
     Ok(TagElementsPositions {
         language_end: input.len(),
         extlang_end: input.len(),
@@ -918,23 +957,6 @@ fn is_numeric(s: &str) -> bool {
 #[inline]
 fn is_alphanumeric(s: &str) -> bool {
     s.bytes().all(|x| x.is_ascii_alphanumeric())
-}
-
-#[inline]
-fn to_uppercase(s: &str) -> impl Iterator<Item = char> + '_ {
-    s.chars().map(|c| c.to_ascii_uppercase())
-}
-
-// Beware: panics if s.len() == 0 (should never happen in our code)
-#[inline]
-fn to_uppercase_first(s: &str) -> impl Iterator<Item = char> + '_ {
-    let mut chars = s.chars();
-    once(chars.next().unwrap().to_ascii_uppercase()).chain(chars.map(|c| c.to_ascii_lowercase()))
-}
-
-#[inline]
-fn to_lowercase(s: &str) -> impl Iterator<Item = char> + '_ {
-    s.chars().map(|c| c.to_ascii_lowercase())
 }
 
 #[inline]
