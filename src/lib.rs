@@ -11,7 +11,7 @@ extern crate alloc;
 use alloc::borrow::{Borrow, Cow};
 use alloc::boxed::Box;
 use alloc::fmt;
-use alloc::str::{FromStr, Split};
+use alloc::str::FromStr;
 use alloc::string::String;
 use core::cmp::Ordering;
 use core::hash::{Hash, Hasher};
@@ -874,17 +874,14 @@ impl<'a> Iterator for ExtensionsIterator<'a> {
 }
 
 struct SubTagIterator<'a> {
-    split: Split<'a, char>,
+    input: &'a str,
     position: usize,
 }
 
 impl<'a> SubTagIterator<'a> {
     #[inline]
     fn new(input: &'a str) -> Self {
-        Self {
-            split: input.split('-'),
-            position: 0,
-        }
+        Self { input, position: 0 }
     }
 }
 
@@ -893,8 +890,16 @@ impl<'a> Iterator for SubTagIterator<'a> {
 
     #[inline]
     fn next(&mut self) -> Option<(&'a str, usize)> {
-        let tag = self.split.next()?;
-        let tag_end = self.position + tag.len();
+        if self.position > self.input.len() {
+            return None;
+        }
+        let remaining = &self.input[self.position..];
+        let end = remaining
+            .bytes()
+            .position(|c| c == b'-')
+            .unwrap_or(remaining.len());
+        let tag = &remaining[..end];
+        let tag_end = self.position + end;
         self.position = tag_end + 1;
         Some((tag, tag_end))
     }
