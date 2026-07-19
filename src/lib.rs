@@ -8,14 +8,13 @@ extern crate std;
 
 extern crate alloc;
 
-use alloc::borrow::{Borrow, Cow};
+use alloc::borrow::{Borrow, Cow, ToOwned};
 use alloc::boxed::Box;
 use alloc::fmt;
 use alloc::str::FromStr;
 use alloc::string::String;
 use core::cmp::Ordering;
 use core::hash::{Hash, Hasher};
-use core::iter::once;
 use core::ops::Deref;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -47,7 +46,7 @@ impl<T: Deref<Target = str>> LanguageTag<T> {
     /// assert_eq!(language_tag.into_inner(), "en-us")
     /// ```
     pub fn parse(tag: T) -> Result<Self, LanguageTagParseError> {
-        let positions = parse_language_tag(&tag, &mut VoidOutputBuffer::default())?;
+        let positions = parse_language_tag(&tag)?;
         Ok(Self { tag, positions })
     }
 
@@ -284,10 +283,38 @@ impl LanguageTag<String> {
     /// assert_eq!(language_tag.into_inner(), "en-US")
     /// ```
     pub fn parse_and_normalize(tag: &str) -> Result<Self, LanguageTagParseError> {
-        let mut output_buffer = String::with_capacity(tag.len());
-        let positions = parse_language_tag(tag, &mut output_buffer)?;
+        // grandfathered tags
+        if let Some(tag) = is_grandfathered(tag) {
+            return Ok(Self {
+                tag: tag.to_owned(),
+                positions: TagElementsPositions::language_only(tag.len()),
+            });
+        }
+        if tag.starts_with("x-") || tag.starts_with("X-") {
+            // private use
+            let positions = parse_privateuse(tag)?;
+            let mut normalized = tag.to_owned();
+            normalized.make_ascii_lowercase();
+            return Ok(Self {
+                tag: normalized,
+                positions,
+            });
+        }
+        let positions = parse_langtag(tag)?;
+        let mut normalized = tag.to_owned();
+        normalized[..positions.extlang_end].make_ascii_lowercase();
+        if positions.extlang_end < positions.script_end {
+            normalized[positions.extlang_end + 1..positions.extlang_end + 2].make_ascii_uppercase();
+            normalized[positions.extlang_end + 2..positions.script_end].make_ascii_lowercase();
+        }
+        if positions.script_end < positions.region_end {
+            normalized[positions.script_end + 1..positions.region_end].make_ascii_uppercase();
+        }
+        if positions.region_end < normalized.len() {
+            normalized[positions.region_end + 1..].make_ascii_lowercase();
+        }
         Ok(Self {
-            tag: output_buffer,
+            tag: normalized,
             positions,
         })
     }
@@ -555,69 +582,34 @@ struct TagElementsPositions {
     extension_end: usize,
 }
 
-trait OutputBuffer: Extend<char> {
-    fn push(&mut self, c: char);
-
-    fn push_str(&mut self, s: &str);
-}
-
-#[derive(Default)]
-struct VoidOutputBuffer {}
-
-impl OutputBuffer for VoidOutputBuffer {
-    #[inline]
-    fn push(&mut self, _: char) {}
-
-    #[inline]
-    fn push_str(&mut self, _: &str) {}
-}
-
-impl Extend<char> for VoidOutputBuffer {
-    #[inline]
-    fn extend<T: IntoIterator<Item = char>>(&mut self, _: T) {}
-}
-
-impl OutputBuffer for String {
-    #[inline]
-    fn push(&mut self, c: char) {
-        self.push(c);
-    }
-
-    #[inline]
-    fn push_str(&mut self, s: &str) {
-        self.push_str(s);
+impl TagElementsPositions {
+    fn language_only(len: usize) -> Self {
+        Self {
+            language_end: len,
+            extlang_end: len,
+            script_end: len,
+            region_end: len,
+            variant_end: len,
+            extension_end: len,
+        }
     }
 }
 
 /// Parses language tag following [the RFC5646 grammar](https://tools.ietf.org/html/rfc5646#section-2.1)
-fn parse_language_tag(
-    input: &str,
-    output: &mut impl OutputBuffer,
-) -> Result<TagElementsPositions, LanguageTagParseError> {
+fn parse_language_tag(input: &str) -> Result<TagElementsPositions, LanguageTagParseError> {
     // grandfathered tags
     if let Some(tag) = is_grandfathered(input) {
-        output.push_str(tag);
-        return Ok(TagElementsPositions {
-            language_end: tag.len(),
-            extlang_end: tag.len(),
-            script_end: tag.len(),
-            region_end: tag.len(),
-            variant_end: tag.len(),
-            extension_end: tag.len(),
-        });
+        return Ok(TagElementsPositions::language_only(tag.len()));
     }
     if input.starts_with("x-") || input.starts_with("X-") {
         // private use
-        return parse_privateuse(input, output);
+        return parse_privateuse(input);
     }
-    parse_langtag(input, output)
+    parse_langtag(input)
 }
 
 /// Handles normal tags.
-fn parse_langtag(
-    input: &str,
-    output: &mut impl OutputBuffer,
-) -> Result<TagElementsPositions, LanguageTagParseError> {
+fn parse_langtag(input: &str) -> Result<TagElementsPositions, LanguageTagParseError> {
     #[derive(PartialEq, Eq)]
     enum State {
         Start,
@@ -657,7 +649,6 @@ fn parse_langtag(
                     });
                 }
                 language_end = end;
-                output.extend(to_lowercase(subtag));
                 if subtag.len() < 4 {
                     // extlangs are only allowed for short language tags
                     State::AfterLanguage
@@ -671,8 +662,6 @@ fn parse_langtag(
                         kind: TagParseErrorKind::InvalidSubtag,
                     });
                 }
-                output.push('-');
-                output.extend(to_lowercase(subtag));
                 State::InPrivateUse { expected: false }
             }
             _ if matches!(subtag, "x" | "X") => {
@@ -682,8 +671,6 @@ fn parse_langtag(
                         kind: TagParseErrorKind::EmptyExtension,
                     });
                 }
-                output.push('-');
-                output.push('x');
                 State::InPrivateUse { expected: true }
             }
             _ if subtag.len() == 1 && is_alphanumeric(subtag) => {
@@ -693,9 +680,6 @@ fn parse_langtag(
                         kind: TagParseErrorKind::EmptyExtension,
                     });
                 }
-                let extension_tag = subtag.chars().next().unwrap().to_ascii_lowercase();
-                output.push('-');
-                output.push(extension_tag);
                 State::InExtension { expected: true }
             }
             State::InExtension { .. } => {
@@ -705,8 +689,6 @@ fn parse_langtag(
                     });
                 }
                 extension_end = end;
-                output.push('-');
-                output.extend(to_lowercase(subtag));
                 State::InExtension { expected: false }
             }
             State::AfterLanguage if subtag.len() == 3 && is_alphabetic(subtag) => {
@@ -718,8 +700,6 @@ fn parse_langtag(
                 }
                 // valid extlangs
                 extlang_end = end;
-                output.push('-');
-                output.extend(to_lowercase(subtag));
                 State::AfterLanguage
             }
             State::AfterLanguage | State::AfterExtLang
@@ -727,8 +707,6 @@ fn parse_langtag(
             {
                 // Script
                 script_end = end;
-                output.push('-');
-                output.extend(to_uppercase_first(subtag));
                 State::AfterScript
             }
             State::AfterLanguage | State::AfterExtLang | State::AfterScript
@@ -737,8 +715,6 @@ fn parse_langtag(
             {
                 // Region
                 region_end = end;
-                output.push('-');
-                output.extend(to_uppercase(subtag));
                 State::AfterRegion
             }
             State::AfterLanguage
@@ -751,8 +727,6 @@ fn parse_langtag(
             {
                 // Variant
                 variant_end = end;
-                output.push('-');
-                output.extend(to_lowercase(subtag));
                 State::AfterRegion
             }
             _ => {
@@ -802,10 +776,7 @@ fn parse_langtag(
     })
 }
 
-fn parse_privateuse(
-    input: &str,
-    output: &mut impl OutputBuffer,
-) -> Result<TagElementsPositions, LanguageTagParseError> {
+fn parse_privateuse(input: &str) -> Result<TagElementsPositions, LanguageTagParseError> {
     let striped_input = &input[2..];
     if striped_input.is_empty() {
         return Err(LanguageTagParseError {
@@ -830,15 +801,7 @@ fn parse_privateuse(
         }
     }
 
-    output.extend(to_lowercase(input));
-    Ok(TagElementsPositions {
-        language_end: input.len(),
-        extlang_end: input.len(),
-        script_end: input.len(),
-        region_end: input.len(),
-        variant_end: input.len(),
-        extension_end: input.len(),
-    })
+    Ok(TagElementsPositions::language_only(input.len()))
 }
 
 struct ExtensionsIterator<'a> {
@@ -918,23 +881,6 @@ fn is_numeric(s: &str) -> bool {
 #[inline]
 fn is_alphanumeric(s: &str) -> bool {
     s.bytes().all(|x| x.is_ascii_alphanumeric())
-}
-
-#[inline]
-fn to_uppercase(s: &str) -> impl Iterator<Item = char> + '_ {
-    s.chars().map(|c| c.to_ascii_uppercase())
-}
-
-// Beware: panics if s.len() == 0 (should never happen in our code)
-#[inline]
-fn to_uppercase_first(s: &str) -> impl Iterator<Item = char> + '_ {
-    let mut chars = s.chars();
-    once(chars.next().unwrap().to_ascii_uppercase()).chain(chars.map(|c| c.to_ascii_lowercase()))
-}
-
-#[inline]
-fn to_lowercase(s: &str) -> impl Iterator<Item = char> + '_ {
-    s.chars().map(|c| c.to_ascii_lowercase())
 }
 
 #[inline]
