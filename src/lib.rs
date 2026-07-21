@@ -46,7 +46,7 @@ impl<T: Deref<Target = str>> LanguageTag<T> {
     /// assert_eq!(language_tag.into_inner(), "en-us")
     /// ```
     pub fn parse(tag: T) -> Result<Self, LanguageTagParseError> {
-        let positions = parse_language_tag(&tag)?;
+        let positions = parse_language_tag(tag.as_bytes())?;
         Ok(Self { tag, positions })
     }
 
@@ -284,7 +284,7 @@ impl LanguageTag<String> {
     /// ```
     pub fn parse_and_normalize(tag: &str) -> Result<Self, LanguageTagParseError> {
         // grandfathered tags
-        if let Some(tag) = is_grandfathered(tag) {
+        if let Some(tag) = is_grandfathered(tag.as_bytes()) {
             return Ok(Self {
                 tag: tag.to_owned(),
                 positions: TagElementsPositions::language_only(tag.len()),
@@ -292,7 +292,7 @@ impl LanguageTag<String> {
         }
         if tag.starts_with("x-") || tag.starts_with("X-") {
             // private use
-            let positions = parse_privateuse(tag)?;
+            let positions = parse_privateuse(tag.as_bytes())?;
             let mut normalized = tag.to_owned();
             normalized.make_ascii_lowercase();
             return Ok(Self {
@@ -300,7 +300,7 @@ impl LanguageTag<String> {
                 positions,
             });
         }
-        let positions = parse_langtag(tag)?;
+        let positions = parse_langtag(tag.as_bytes())?;
         let mut normalized = tag.to_owned();
         normalized[..positions.extlang_end].make_ascii_lowercase();
         if positions.extlang_end < positions.script_end {
@@ -596,12 +596,12 @@ impl TagElementsPositions {
 }
 
 /// Parses language tag following [the RFC5646 grammar](https://tools.ietf.org/html/rfc5646#section-2.1)
-fn parse_language_tag(input: &str) -> Result<TagElementsPositions, LanguageTagParseError> {
+fn parse_language_tag(input: &[u8]) -> Result<TagElementsPositions, LanguageTagParseError> {
     // grandfathered tags
     if let Some(tag) = is_grandfathered(input) {
         return Ok(TagElementsPositions::language_only(tag.len()));
     }
-    if input.starts_with("x-") || input.starts_with("X-") {
+    if input.starts_with(b"x-") || input.starts_with(b"X-") {
         // private use
         return parse_privateuse(input);
     }
@@ -609,7 +609,7 @@ fn parse_language_tag(input: &str) -> Result<TagElementsPositions, LanguageTagPa
 }
 
 /// Handles normal tags.
-fn parse_langtag(input: &str) -> Result<TagElementsPositions, LanguageTagParseError> {
+fn parse_langtag(input: &[u8]) -> Result<TagElementsPositions, LanguageTagParseError> {
     #[derive(PartialEq, Eq)]
     enum State {
         Start,
@@ -664,7 +664,7 @@ fn parse_langtag(input: &str) -> Result<TagElementsPositions, LanguageTagParseEr
                 }
                 State::InPrivateUse { expected: false }
             }
-            _ if matches!(subtag, "x" | "X") => {
+            _ if matches!(subtag, b"x" | b"X") => {
                 // We make sure extension is found
                 if let State::InExtension { expected: true } = state {
                     return Err(LanguageTagParseError {
@@ -722,8 +722,8 @@ fn parse_langtag(input: &str) -> Result<TagElementsPositions, LanguageTagParseEr
             | State::AfterScript
             | State::AfterRegion
                 if is_alphanumeric(subtag)
-                    && (subtag.len() >= 5 && subtag.as_bytes()[0].is_ascii_alphabetic()
-                        || subtag.len() >= 4 && subtag.as_bytes()[0].is_ascii_digit()) =>
+                    && (subtag.len() >= 5 && subtag[0].is_ascii_alphabetic()
+                        || subtag.len() >= 4 && subtag[0].is_ascii_digit()) =>
             {
                 // Variant
                 variant_end = end;
@@ -776,14 +776,14 @@ fn parse_langtag(input: &str) -> Result<TagElementsPositions, LanguageTagParseEr
     })
 }
 
-fn parse_privateuse(input: &str) -> Result<TagElementsPositions, LanguageTagParseError> {
+fn parse_privateuse(input: &[u8]) -> Result<TagElementsPositions, LanguageTagParseError> {
     let striped_input = &input[2..];
     if striped_input.is_empty() {
         return Err(LanguageTagParseError {
             kind: TagParseErrorKind::EmptyPrivateUse,
         });
     }
-    for subtag in striped_input.split('-') {
+    for (subtag, _) in SubTagIterator::new(striped_input) {
         if subtag.is_empty() {
             return Err(LanguageTagParseError {
                 kind: TagParseErrorKind::EmptySubtag,
@@ -837,29 +837,29 @@ impl<'a> Iterator for ExtensionsIterator<'a> {
 }
 
 struct SubTagIterator<'a> {
-    input: &'a str,
+    input: &'a [u8],
     position: usize,
 }
 
 impl<'a> SubTagIterator<'a> {
     #[inline]
-    fn new(input: &'a str) -> Self {
+    fn new(input: &'a [u8]) -> Self {
         Self { input, position: 0 }
     }
 }
 
 impl<'a> Iterator for SubTagIterator<'a> {
-    type Item = (&'a str, usize);
+    type Item = (&'a [u8], usize);
 
     #[inline]
-    fn next(&mut self) -> Option<(&'a str, usize)> {
+    fn next(&mut self) -> Option<(&'a [u8], usize)> {
         if self.position > self.input.len() {
             return None;
         }
         let remaining = &self.input[self.position..];
         let end = remaining
-            .bytes()
-            .position(|c| c == b'-')
+            .iter()
+            .position(|&c| c == b'-')
             .unwrap_or(remaining.len());
         let tag = &remaining[..end];
         let tag_end = self.position + end;
@@ -869,23 +869,22 @@ impl<'a> Iterator for SubTagIterator<'a> {
 }
 
 #[inline]
-fn is_alphabetic(s: &str) -> bool {
-    s.bytes().all(|x| x.is_ascii_alphabetic())
+fn is_alphabetic(s: &[u8]) -> bool {
+    s.iter().all(u8::is_ascii_alphabetic)
 }
 
 #[inline]
-fn is_numeric(s: &str) -> bool {
-    s.bytes().all(|x| x.is_ascii_digit())
+fn is_numeric(s: &[u8]) -> bool {
+    s.iter().all(u8::is_ascii_digit)
 }
 
 #[inline]
-fn is_alphanumeric(s: &str) -> bool {
-    s.bytes().all(|x| x.is_ascii_alphanumeric())
+fn is_alphanumeric(s: &[u8]) -> bool {
+    s.iter().all(u8::is_ascii_alphanumeric)
 }
 
 #[inline]
-fn is_grandfathered(tag: &str) -> Option<&'static str> {
-    let tag = tag.as_bytes();
+fn is_grandfathered(tag: &[u8]) -> Option<&'static str> {
     if tag.len() < 5 {
         return None;
     }
