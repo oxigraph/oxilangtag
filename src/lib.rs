@@ -518,7 +518,7 @@ impl<'de, T: Deref<Target = str> + Deserialize<'de>> Deserialize<'de> for Langua
     }
 }
 
-/// An error raised during [`LanguageTag`](struct.LanguageTag.html) validation.
+/// An error raised during [`LanguageTag`] validation.
 #[derive(Debug)]
 pub struct LanguageTagParseError {
     kind: TagParseErrorKind,
